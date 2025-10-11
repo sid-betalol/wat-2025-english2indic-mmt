@@ -97,3 +97,26 @@ Each language has:
 - Development set: ~1K images  
 - Test set: ~1.6K images
 - Challenge test set: 1.4K images
+
+## API Configuration
+
+This project uses OpenAI and Sarvam AI for multimodal translation. Configure your API keys in a `.env` file:
+
+```bash
+# OpenAI API Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Sarvam API Configuration
+SARVAM_API_KEY=your_sarvam_api_key_here
+SARVAM_BASE_URL=https://api.sarvam.ai/v1
+```
+
+## Dependencies
+
+The project includes the following key dependencies:
+- **openai**: OpenAI API client for GPT-4 Vision
+- **sarvamai**: Sarvam AI API client for Indic language models
+- **torch**: PyTorch for deep learning
+- **transformers**: Hugging Face transformers for NLP models
+- **pillow**: Image processing
+- **python-dotenv**: Environment variable management

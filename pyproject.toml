@@ -7,7 +7,16 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "openai>=2.3.0",
+    "pillow>=11.3.0",
+    "python-dotenv>=1.1.1",
+    "requests>=2.32.5",
+    "sarvamai>=0.1.21",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+    "transformers>=4.57.0",
+]
 
 [project.optional-dependencies]
 dev = [
