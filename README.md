@@ -1,122 +1,135 @@
-# WAT 2025 English to Indic Multimodal Translation
+# WAT 2025 English→Indic Multimodal Translation
 
-This repository contains code for the WAT 2025 English to Indic Multimodal Translation task.
+Automated data cleaning pipeline for the WAT 2025 English-to-Indic Multimodal Machine Translation task using LLM-as-a-judge methodology.
 
-## Setup
+## Quick Start
 
-This project uses `uv` for dependency management and `ruff` for linting and formatting.
-
-### Prerequisites
-
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) for package management
-
-### Installation
-
-1. Clone the repository:
 ```bash
-git clone <repository-url>
+# Clone and setup
+git clone https://github.com/sid-betalol/wat-2025-english2indic-mmt.git
 cd wat-2025-english2indic-mmt
-```
-
-2. Install dependencies using uv:
-```bash
 uv sync
+
+# Set up API keys
+cp env.example .env
+# Edit .env and add your OPENAI_API_KEY and HuggingFace token
+
+# Login to HuggingFace (for IndicTrans2 model)
+uv run huggingface-cli login
+
+# Test with 10 examples
+uv run clean_data.py --sample 10
+
+# Process full training set
+uv run clean_data.py
 ```
 
-3. Activate the virtual environment:
-```bash
-# Option 1: Use the activation script
-source activate_env.sh
+## How It Works
 
-# Option 2: Manual activation
-source .venv/bin/activate  # On Unix/macOS
-# or
-.venv\Scripts\activate     # On Windows
-```
+The pipeline cleans multimodal translation data across 4 languages (Hindi, Bengali, Malayalam, Odia) using a 3-stage approach:
 
-### Automatic Terminal Activation
+### 1. Judge Stage
+- GPT-4o-mini evaluates each caption with the image
+- Classifies as: `correct`, `visual_context_needed`, or `poor_translation`
 
-This project is configured to automatically activate the virtual environment when you open a new terminal in Cursor:
+### 2. Correction Routing
+- **Missing/Visual Context** → LLM regenerates caption using image
+- **Poor Translation** → IndicTrans2 retranslates from English
+- **Correct** → Keep original
 
-1. **Open the workspace file**: Open `wat-2025-english2indic-mmt.code-workspace` in Cursor
-2. **New terminals will auto-activate**: Every new terminal you create will automatically activate the virtual environment
-3. **Fallback activation**: If auto-activation doesn't work, use `source activate_env.sh`
+### 3. Output
+One row per image with all 4 languages:
+- Original and corrected captions for each language
+- Correction flags, reasons, confidence scores
+- Judge explanations
 
-### Development
-
-#### Linting and Formatting
-
-This project uses `ruff` for both linting and formatting:
-
-```bash
-# Check for linting issues
-uv run ruff check .
-
-# Fix auto-fixable linting issues
-uv run ruff check . --fix
-
-# Format code
-uv run ruff format .
-
-# Run both linting and formatting
-uv run ruff check . --fix && uv run ruff format .
-```
-
-#### Testing
+## Data Preparation
 
 ```bash
-# Run tests
-uv run pytest
+# 1. Combine datasets
+uv run combine_datasets.py
 
-# Run tests with coverage
-uv run pytest --cov
+# 2. Crop images to bounding boxes
+uv run crop_images.py
+
+# 3. Clean captions
+uv run clean_data.py
 ```
+
+## Command Options
+
+```bash
+uv run clean_data.py [OPTIONS]
+
+--sample N              # Process only first N examples (testing)
+--model MODEL           # OpenAI model (default: gpt-4o-mini)
+--csv PATH              # Input CSV (default: combined_data/combined_train.csv)
+--images PATH           # Images directory (default: cropped_images/train)
+--output PATH           # Output directory (default: cleaned_data)
+--checkpoint-freq N     # Save checkpoint every N examples (default: 100)
+```
+
+## Output Format
+
+**cleaned_data.csv**: Wide format with columns:
+```
+image_id, x, y, width, height, english_caption,
+hindi_original, hindi_corrected, hindi_was_corrected, hindi_reason, hindi_confidence, hindi_explanation,
+bengali_original, bengali_corrected, bengali_was_corrected, bengali_reason, bengali_confidence, bengali_explanation,
+malayalam_original, malayalam_corrected, malayalam_was_corrected, malayalam_reason, malayalam_confidence, malayalam_explanation,
+odia_original, odia_corrected, odia_was_corrected, odia_reason, odia_confidence, odia_explanation
+```
+
+**statistics.json**: Correction counts and percentages by language
+
+## Features
+
+✅ **Automatic checkpointing** - Resume from interruptions  
+✅ **DSPy caching** - Fast re-runs on same data  
+✅ **MPS acceleration** - Optimized for Apple Silicon  
+✅ **Progress tracking** - Real-time progress bars and timing  
+✅ **Error handling** - Robust error recovery
 
 ## Project Structure
 
 ```
-├── data/                    # Dataset files
-│   ├── bengali/            # Bengali dataset
-│   └── hindi/              # Hindi dataset
-├── src/                    # Source code (to be created)
-├── tests/                  # Test files (to be created)
-├── pyproject.toml          # Project configuration
-├── .gitignore             # Git ignore rules
-└── README.md              # This file
+├── data/                       # Raw datasets (4 languages)
+├── combined_data/              # Combined CSVs
+├── cropped_images/             # Cropped image regions
+├── cleaned_data/               # Cleaned output
+├── src/wat_mmt/data_cleaner/  # Cleaning pipeline
+│   ├── judge.py               # LLM judge module
+│   ├── corrector.py           # LLM corrector module
+│   ├── translator.py          # IndicTrans2 wrapper
+│   ├── pipeline.py            # Main orchestration
+│   └── utils.py               # Helper functions
+├── clean_data.py              # Main entry point
+├── combine_datasets.py        # Data preparation
+└── crop_images.py             # Image preprocessing
 ```
 
-## Data
+## Requirements
 
-The dataset contains:
-- Bengali Visual Genome data (train/dev/test/challenge sets)
-- Hindi Visual Genome data (train/dev/test/challenge sets)
+- Python 3.11+
+- OpenAI API key (for GPT-4o-mini)
+- HuggingFace account with access to `ai4bharat/indictrans2-en-indic-dist-200M`
+- 8GB+ RAM recommended for IndicTrans2 model
 
-Each language has:
-- Training set: ~29K images
-- Development set: ~1K images  
-- Test set: ~1.6K images
-- Challenge test set: 1.4K images
+## Tips
 
-## API Configuration
+- **Test first**: Always use `--sample` to validate before full run
+- **Monitor costs**: GPT-4o-mini costs ~$0.15/$0.60 per 1M tokens (input/output)
+- **Resume anytime**: Ctrl+C to stop, same command to resume
+- **Check stats**: Review `statistics.json` for correction patterns
 
-This project uses OpenAI and Sarvam AI for multimodal translation. Configure your API keys in a `.env` file:
+## Citation
 
-```bash
-# OpenAI API Configuration
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Sarvam API Configuration
-SARVAM_API_KEY=your_sarvam_api_key_here
-SARVAM_BASE_URL=https://api.sarvam.ai/v1
+```bibtex
+@inproceedings{betala-chokshi-2024-brotherhood,
+    title = "Brotherhood at {WMT} 2024: Leveraging {LLM}-Generated Contextual Conversations for Cross-Lingual Image Captioning",
+    author = "Betala, Siddharth and Chokshi, Ishan",
+    booktitle = "Proceedings of the Ninth Conference on Machine Translation",
+    year = "2024",
+    publisher = "Association for Computational Linguistics",
+}
 ```
-
-## Dependencies
-
-The project includes the following key dependencies:
-- **openai**: OpenAI API client for GPT-4 Vision
-- **sarvamai**: Sarvam AI API client for Indic language models
-- **torch**: PyTorch for deep learning
-- **transformers**: Hugging Face transformers for NLP models
-- **pillow**: Image processing
-- **python-dotenv**: Environment variable management

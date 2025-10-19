@@ -1,0 +1,324 @@
+English-to-Indic Multi-Modal Translation Task
+After six years of evolving Multimodal Translation Tasks at the Workshop on Asian Translation (WAT), this year introduces a new merged task: the “English-to-Indic Multimodal Translation Task.” The task is based on our “{Hindi, Bengali, Malayalam, Odia} Visual Genome” datasets, which offer both text and image data to support English-to-{Hindi, Bengali, Malayalam, Odia} machine translation and multimodal research.
+
+ 
+
+Timeline
+October 22 (extended and final): Translations need to be submitted to the organizers
+
+October 27, 2025: System description paper submission deadline
+
+November 03, 2025: Review feedback for system description
+
+November 11, 2025: Camera-ready
+
+December 23 or 24, 2025: Workshop takes place
+
+Task Description
+The setup of the task is as follows:
+
+Inputs:
+
+An image,
+
+A rectangular region in that image,
+
+A short English caption of the rectangular region.
+
+Expected Output:
+
+The caption of the rectangular region in {Hindi, Bengali, Malayalam, Odia}.
+
+ 
+Types of Submissions Expected
+Participants are welcome to submit outputs for any subsets of the task languages (Hindi, Bengali, Malayalam, Odia) for any subset of the following task modalities:
+
+Text-only translation (Source image not used)
+
+Image captioning (English source text not used)
+
+Multi-modal translation (uses both the image and the text)
+
+Participants must indicate to which track their translations belong:
+
+Text-only / Image-only / Multi-modal
+
+see above
+
+Domain-Aware / Domain-Unaware
+
+Whether or not the full (English) Visual Genome was used in training.
+
+Bilingual / Multilingual
+
+Whether or not your model is multilingual, translating from English into all of the desired languages, or whether you used individual pairwise models.
+
+Constrained / Non-Constrained
+
+The limitations for the constrained systems track are as follows:
+
+Allowed pretrained LLMs:
+
+Llama-2-7B, Llama-2-13B, Mistral-7B
+
+You may adapt/fine-tune / whatever these models using the provided constrained data only.
+
+Allowed multimodal LLMs
+
+CLIP, DALL-E, Gemini, LLaVA
+
+You may adapt/fine-tune / whatever these models using the provided constrained data only. Mention if you use any other Multimodal LLMs.
+
+Allowed pretrained LMs:
+
+mBART, BERT, RoBERTa, XLM-RoBERTa, sBERT, LaBSE (all in all publicly available model sizes)
+
+You may ONLY use the training data allowed for this year (linked below).
+
+You may use any publicly available automatic quality metric during your development
+
+Any basic linguistics tools (taggers, parsers, morphology analyzers, etc.)
+
+Non-constrained submissions may use other data or pretrained models, but need to specify what was used.
+
+Training Data
+The {Hindi, Bengali, Malayalam, Odia} Visual Genome consists of:
+
+29k training examples
+
+1k dev set
+
+1.6k evaluation set
+
+All the datasets use the same underlying set of images with a handful of differences due to sanity checks that were carried out in each of the languages independently.
+
+Evaluation
+WAT2025 Multi-Modal Task will be evaluated on:
+
+1.6k evaluation set of {Hindi, Bengali, Malayalam, Odia} Visual Genome
+
+1.4k challenge set of {Hindi, Bengali, Malayalam, Odia} Visual Genome
+
+Means of evaluation:
+
+Automatic metrics: BLEU, CHRF3, and others
+
+Manual evaluation, subject to the availability of {Hindi, Bengali, Malayalam, Odia} speakers
+
+
+Size
+32923 sentences, 32534 images
+Language(s)
+English
+,
+Hindi
+Description
+Data
+----
+Hindi Visual Genome 1.1 is an updated version of Hindi Visual Genome 1.0. The update concerns primarily the text part of Hindi Visual Genome, fixing translation issues reported during WAT 2019 multimodal task. In the image part, only one segment and thus one image were removed from the dataset.
+
+Hindi Visual Genome 1.1 serves in "WAT 2020 Multi-Modal Machine Translation Task".
+
+Hindi Visual Genome is a multimodal dataset consisting of text and images suitable for English-to-Hindi multimodal machine translation task and multimodal research. We have selected short English segments (captions) from Visual Genome along with associated images and automatically translated them to Hindi with manual post-editing, taking the associated images into account.
+
+The training set contains 29K segments. Further 1K and 1.6K segments are provided in a development and test sets, respectively, which follow the same (random) sampling from the original Hindi Visual Genome.
+
+A third test set is called ``challenge test set'' consists of 1.4K segments and it was released for WAT2019 multi-modal task. The challenge test set was created by searching for (particularly) ambiguous English words based on the embedding similarity and manually selecting those where the image helps to resolve the ambiguity. The surrounding words in the sentence however also often include sufficient cues to identify the correct meaning of the ambiguous word.
+
+Dataset Formats
+--------------
+The multimodal dataset contains both text and images.
+
+The text parts of the dataset (train and test sets) are in simple
+tab-delimited plain text files.
+
+All the text files have seven columns as follows:
+
+Column1 - image_id
+Column2 - X
+Column3 - Y
+Column4 - Width
+Column5 - Height
+Column6 - English Text
+Column7 - Hindi Text
+
+The image part contains the full images with the corresponding image_id as the file name. The X, Y, Width and Height columns indicate the rectangular region in the image described by the caption.
+
+Data Statistics
+----------------
+The statistics of the current release is given below.
+
+Parallel Corpus Statistics
+---------------------------
+
+Dataset Segments English Words Hindi Words
+------- --------- ---------------- -------------
+Train 28930 143164 145448
+Dev 998 4922 4978
+Test 1595 7853 7852
+Challenge Test 1400 8186 8639
+------- --------- ---------------- -------------
+Total 32923 164125 166917
+
+The word counts are approximate, prior to tokenization.
+
+Date issued
+2022
+Type
+corpus
+,
+image
+Size
+32923 sentences, 32533 images
+Language(s)
+English
+,
+Bengali
+Description
+Data
+-------
+Bengali Visual Genome (BVG for short) 1.0 has similar goals as Hindi Visual Genome (HVG) 1.1: to support the Bengali language. Bengali Visual Genome 1.0 is the multi-modal dataset in Bengali for machine translation and image
+captioning. Bengali Visual Genome is a multimodal dataset consisting of text and images suitable for English-to-Bengali multimodal machine translation tasks and multimodal research. We follow the same selection of short English segments (captions) and the associated images from Visual Genome as HGV 1.1 has. For BVG, we manually translated these captions from English to Bengali taking the associated images into account. The manual translation is performed by the native Bengali speakers without referring to any machine translation system.
+
+The training set contains 29K segments. Further 1K and 1.6K segments are provided in development and test sets, respectively, which follow the same (random) sampling from the original Hindi Visual Genome. A third test set is
+called the ``challenge test set'' and consists of 1.4K segments. The challenge test set was created for the WAT2019 multi-modal task by searching for (particularly) ambiguous English words based on the embedding similarity and
+manually selecting those where the image helps to resolve the ambiguity. The surrounding words in the sentence however also often include sufficient cues to identify the correct meaning of the ambiguous word.
+
+Dataset Formats
+---------------
+The multimodal dataset contains both text and images.
+
+The text parts of the dataset (train and test sets) are in simple tab-delimited plain text files.
+
+All the text files have seven columns as follows:
+
+Column1 - image_id
+Column2 - X
+Column3 - Y
+Column4 - Width
+Column5 - Height
+Column6 - English Text
+Column7 - Bengali Text
+
+The image part contains the full images with the corresponding image_id as the file name. The X, Y, Width and Height columns indicate the rectangular region in the image described by the caption.
+
+
+Data Statistics
+---------------
+The statistics of the current release are given below.
+
+Parallel Corpus Statistics
+--------------------------
+
+Dataset Segments English Words Bengali Words
+---------- -------- ------------- -------------
+Train 28930 143115 113978
+Dev 998 4922 3936
+Test 1595 7853 6408
+Challenge Test 1400 8186 6657
+---------- -------- ------------- -------------
+Total 32923 164076 130979
+
+The word counts are approximate, prior to tokenization.
+
+Language(s)
+English
+,
+Malayalam
+Description
+Data
+-------
+Malayalam Visual Genome (MVG for short) 1.0 has similar goals as Hindi Visual Genome (HVG) 1.1: to support the Malayalam language. Malayalam Visual Genome 1.0 is the first multi-modal dataset in Malayalam for machine translation and image captioning.
+
+Malayalam Visual Genome 1.0 serves in "WAT 2021 Multi-Modal Machine Translation Task".
+
+Malayalam Visual Genome is a multimodal dataset consisting of text and images suitable for English-to-Malayalam multimodal machine translation task and multimodal research. We follow the same selection of short English segments (captions) and the associated images from Visual Genome as HGV 1.1 has. For MVG, we automatically translated these captions from English to Malayalam and manually corrected them, taking the associated images into account.
+
+The training set contains 29K segments. Further 1K and 1.6K segments are provided in development and test sets, respectively, which follow the same (random) sampling from the original Hindi Visual Genome.
+
+A third test set is called ``challenge test set'' and consists of 1.4K segments. The challenge test set was created for the WAT2019 multi-modal task by searching for (particularly) ambiguous English words based on the embedding similarity and manually selecting those where the image helps to resolve the ambiguity. The surrounding words in the sentence however also often include sufficient cues to identify the correct meaning of the ambiguous word. For MVG, we simply translated the English side of the test sets to Malayalam, again utilizing machine translation to speed up the process.
+
+Dataset Formats
+----------------------
+The multimodal dataset contains both text and images.
+
+The text parts of the dataset (train and test sets) are in simple tab-delimited plain text files.
+
+All the text files have seven columns as follows:
+Column1 - image_id
+Column2 - X
+Column3 - Y
+Column4 - Width
+Column5 - Height
+Column6 - English Text
+Column7 - Malayalam Text
+
+The image part contains the full images with the corresponding image_id as the file name. The X, Y, Width and Height columns indicate the rectangular region in the image described by the caption.
+
+Data Statistics
+-------------------
+The statistics of the current release are given below.
+
+Parallel Corpus Statistics
+---------------------------------
+
+Dataset Segments English Words Malayalam Words
+---------- -------------- -------------------- -----------------
+Train 28930 143112 107126
+Dev 998 4922 3619
+Test 1595 7853 5689
+Challenge Test 1400 8186 6044
+-------------------- ------------ ------------------ ------------------
+Total 32923 164073 122478
+
+The word counts are approximate, prior to tokenization.
+
+Type
+corpus
+,
+text
+Size
+32923 sentences, 32533 images
+Language(s)
+Odia
+,
+English
+Description
+The Odia Visual Genome is a multimodal dataset comprising aligned textual and visual data, designed to support research in English-Odia multimodal machine translation as well as broader studies in multimodal language processing. The dataset is derived from the Visual Genome corpus, which provides short English image captions paired with corresponding images. For the Odia Visual Genome, we selected a subset of these captions and automatically translated them into Odia, followed by careful manual post-editing. In the post-editing stage, annotators explicitly considered the associated visual context to ensure semantic adequacy and naturalness of the Odia translations.
+
+The corpus is partitioned into four subsets. The training set contains approximately 29,000 segments, while the development set and the test set contain 1,000 and 1,600 segments, respectively. Both were taken from Hindi Visual Genome 1.1 where they were created via random sampling from the Visual Genome corpus. In addition, a challenge test set of 1,400 segments was prepared for the WAT2019 Multimodal Translation Task. The challenge test set was constructed to specifically target lexical ambiguity in English captions. Candidate items were identified based on embedding similarity, and ambiguous instances were manually selected where visual information plays a crucial role in disambiguation. Although in many cases surrounding textual context also provides sufficient cues, the inclusion of the image enhances the robustness of disambiguation.
+
+Odia Visual Genome was used in WAT 2025 Multimodal Translation Task (https://ufal.mff.cuni.cz/wat2025english-indicmultimodaltranslation).
+
+Dataset Formats
+
+The dataset contains both textual and visual components.
+Textual Data. The training, development, and test partitions are distributed as tab-delimited plain-text files. Each file consists of seven columns:
+
+Column1 - image_id
+Column2 - X
+Column3 - Y
+Column4 - Width
+Column5 - Height
+Column6 - English Text
+Column7 - Odia Text
+
+The bounding-box coordinates (X, Y, Width, Height) specify the rectangular region of the image referenced by the caption.
+
+Visual Data.
+
+The image collection contains full-resolution images, each identified by the corresponding image_id. The bounding-box metadata enables linking of captions to specific regions within the images.
+
+Corpus Statistics
+
+Parallel corpus statistics for Odia Visual Genome.
+Dataset Segments English Words Odia Words
+---------------- --------- ---------------- -------------
+Train 28930 143134 141652
+Dev 998 4922 4912
+Test 1595 7854 7734
+Challenge Test 1400 8186 8100
+---------------- --------- ---------------- -------------
+Total 32923 164096 162398
+
+The word counts are approximate, prior to tokenization.
