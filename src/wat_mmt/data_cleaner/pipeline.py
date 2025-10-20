@@ -45,6 +45,10 @@ class DataCleaningPipeline:
         output_dir: str | Path,
         model: str = "gpt-4o-mini",
         provider: str = "openai",
+        judge_model: str | None = None,
+        judge_provider: str | None = None,
+        corrector_model: str | None = None,
+        corrector_provider: str | None = None,
         checkpoint_frequency: int = 100,
         sample_size: int | None = None,
     ):
@@ -54,8 +58,17 @@ class DataCleaningPipeline:
             csv_path: Path to the combined CSV file
             images_dir: Directory containing cropped images
             output_dir: Directory to save outputs
-            model: Model name to use (e.g., gpt-4o-mini, gemini-1.5-flash)
-            provider: LLM provider ('openai' or 'google')
+            model: Default model name
+                (used if judge/corrector not specified)
+            provider: Default LLM provider
+                (used if judge/corrector not specified)
+            judge_model: Model for judge (if None, uses default model)
+            judge_provider: Provider for judge
+                (if None, uses default provider)
+            corrector_model: Model for corrector
+                (if None, uses default model)
+            corrector_provider: Provider for corrector
+                (if None, uses default provider)
             checkpoint_frequency: Save checkpoint every N examples
             sample_size: If set, only process first N examples (for testing)
         """
@@ -71,40 +84,56 @@ class DataCleaningPipeline:
         # Load environment variables
         load_dotenv()
 
-        # Initialize DSPy with the specified provider
-        provider = provider.lower()
-        if provider == "openai":
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "OPENAI_API_KEY not found in environment. "
-                    "Please create a .env file with your API key."
+        # Helper function to create LM instances
+        def create_lm(model_name: str, provider_name: str) -> dspy.LM:
+            provider_name = provider_name.lower()
+            if provider_name == "openai":
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "OPENAI_API_KEY not found in environment. "
+                        "Please create a .env file with your API key."
+                    )
+                return dspy.LM(
+                    f"openai/{model_name}", api_key=api_key, max_tokens=1000
                 )
-            # Configure DSPy with OpenAI (DSPy 3.0 API)
-            lm = dspy.LM(f"openai/{model}", api_key=api_key, max_tokens=1000)
-        elif provider == "google":
-            api_key = os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                raise ValueError(
-                    "GEMINI_API_KEY not found in environment. "
-                    "Please create a .env file with your API key."
+            elif provider_name == "google":
+                api_key = os.getenv("GEMINI_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "GEMINI_API_KEY not found in environment. "
+                        "Please create a .env file with your API key."
+                    )
+                return dspy.LM(
+                    f"gemini/{model_name}", api_key=api_key, max_tokens=1000
                 )
-            # Configure DSPy with Google Gemini (uses gemini/ prefix in LiteLLM)
-            lm = dspy.LM(f"gemini/{model}", api_key=api_key, max_tokens=1000)
-        else:
-            raise ValueError(
-                f"Unsupported provider: {provider}. "
-                "Choose 'openai' or 'google'."
-            )
+            else:
+                raise ValueError(
+                    f"Unsupported provider: {provider_name}. "
+                    "Choose 'openai' or 'google'."
+                )
 
-        # Configure DSPy
-        # Cache is enabled by default for faster development/testing
-        dspy.configure(lm=lm)
+        # Determine models for each component
+        judge_model_name = judge_model or model
+        judge_provider_name = judge_provider or provider
+        corrector_model_name = corrector_model or model
+        corrector_provider_name = corrector_provider or provider
 
-        # Initialize modules
+        # Create LM instances
+        judge_lm = create_lm(judge_model_name, judge_provider_name)
+        corrector_lm = create_lm(corrector_model_name, corrector_provider_name)
+
+        # Configure default LM (for other modules like translator)
+        default_lm = create_lm(model, provider)
+        dspy.configure(lm=default_lm)
+
+        # Initialize modules with specific LMs
         print("Initializing modules (cache enabled for efficiency)...")
-        self.judge = CaptionJudge()
-        self.corrector = VisualCaptionCorrector()
+        print(f"  Judge: {judge_provider_name}/{judge_model_name}")
+        print(f"  Corrector: {corrector_provider_name}/{corrector_model_name}")
+
+        self.judge = CaptionJudge(lm=judge_lm)
+        self.corrector = VisualCaptionCorrector(lm=corrector_lm)
         self.translator = IndicTranslator()
 
         # Load data

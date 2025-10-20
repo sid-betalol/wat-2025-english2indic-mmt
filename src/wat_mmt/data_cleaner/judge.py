@@ -63,10 +63,19 @@ class CaptionJudgment(dspy.Signature):
 class CaptionJudge(dspy.Module):
     """DSPy module for judging caption quality with visual context."""
 
-    def __init__(self):
-        """Initialize the caption judge."""
+    def __init__(self, lm: dspy.LM | None = None):
+        """Initialize the caption judge.
+
+        Args:
+            lm: Language model to use (if None, uses globally configured LM)
+        """
         super().__init__()
-        self.judge = dspy.ChainOfThought(CaptionJudgment)
+        if lm:
+            with dspy.context(lm=lm):
+                self.judge = dspy.ChainOfThought(CaptionJudgment)
+        else:
+            self.judge = dspy.ChainOfThought(CaptionJudgment)
+        self.lm = lm
 
     def forward(
         self,
@@ -113,12 +122,21 @@ class CaptionJudge(dspy.Module):
             image.save(tmp_path, format="PNG")
 
         try:
-            result = self.judge(
-                image=dspy.Image(url=str(tmp_path)),
-                english_caption=english_caption,
-                target_caption=target_caption,
-                target_language=target_language,
-            )
+            if self.lm:
+                with dspy.context(lm=self.lm):
+                    result = self.judge(
+                        image=dspy.Image(url=str(tmp_path)),
+                        english_caption=english_caption,
+                        target_caption=target_caption,
+                        target_language=target_language,
+                    )
+            else:
+                result = self.judge(
+                    image=dspy.Image(url=str(tmp_path)),
+                    english_caption=english_caption,
+                    target_caption=target_caption,
+                    target_language=target_language,
+                )
         finally:
             # Clean up temporary file
             tmp_path.unlink(missing_ok=True)

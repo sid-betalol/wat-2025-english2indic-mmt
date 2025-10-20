@@ -49,10 +49,23 @@ class VisualCaptionCorrectionSignature(dspy.Signature):
 class VisualCaptionCorrector(dspy.Module):
     """DSPy module for correcting captions using visual context."""
 
-    def __init__(self):
-        """Initialize the caption corrector."""
+    def __init__(self, lm: dspy.LM | None = None):
+        """Initialize the caption corrector.
+
+        Args:
+            lm: Language model to use (if None, uses globally configured LM)
+        """
         super().__init__()
-        self.corrector = dspy.ChainOfThought(VisualCaptionCorrectionSignature)
+        if lm:
+            with dspy.context(lm=lm):
+                self.corrector = dspy.ChainOfThought(
+                    VisualCaptionCorrectionSignature
+                )
+        else:
+            self.corrector = dspy.ChainOfThought(
+                VisualCaptionCorrectionSignature
+            )
+        self.lm = lm
 
     def forward(
         self,
@@ -81,12 +94,23 @@ class VisualCaptionCorrector(dspy.Module):
             image.save(tmp_path, format="PNG")
 
         try:
-            result = self.corrector(
-                image=dspy.Image(url=str(tmp_path)),
-                english_caption=english_caption,
-                target_language=target_language,
-                original_target_caption=original_target_caption or "[MISSING]",
-            )
+            if self.lm:
+                with dspy.context(lm=self.lm):
+                    result = self.corrector(
+                        image=dspy.Image(url=str(tmp_path)),
+                        english_caption=english_caption,
+                        target_language=target_language,
+                        original_target_caption=original_target_caption
+                        or "[MISSING]",
+                    )
+            else:
+                result = self.corrector(
+                    image=dspy.Image(url=str(tmp_path)),
+                    english_caption=english_caption,
+                    target_language=target_language,
+                    original_target_caption=original_target_caption
+                    or "[MISSING]",
+                )
         finally:
             # Clean up temporary file
             tmp_path.unlink(missing_ok=True)

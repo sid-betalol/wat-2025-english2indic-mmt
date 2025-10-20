@@ -47,7 +47,7 @@ def main():
         "--model",
         type=str,
         default="gpt-4o-mini",
-        help="Model name (e.g., gpt-4o-mini, gemini-1.5-flash, gemini-1.5-pro)",
+        help="Default model name (used if --judge-model or --corrector-model not specified)",
     )
 
     parser.add_argument(
@@ -55,7 +55,37 @@ def main():
         type=str,
         default="openai",
         choices=["openai", "google"],
-        help="LLM provider to use",
+        help="Default LLM provider (used if --judge-provider or --corrector-provider not specified)",
+    )
+
+    parser.add_argument(
+        "--judge-model",
+        type=str,
+        default=None,
+        help="Model for judge (e.g., gpt-4o-mini, gemini-1.5-flash). If not set, uses --model",
+    )
+
+    parser.add_argument(
+        "--judge-provider",
+        type=str,
+        default=None,
+        choices=["openai", "google"],
+        help="Provider for judge. If not set, uses --provider",
+    )
+
+    parser.add_argument(
+        "--corrector-model",
+        type=str,
+        default=None,
+        help="Model for corrector (e.g., gpt-4o, gemini-1.5-pro). If not set, uses --model",
+    )
+
+    parser.add_argument(
+        "--corrector-provider",
+        type=str,
+        default=None,
+        choices=["openai", "google"],
+        help="Provider for corrector. If not set, uses --provider",
     )
 
     parser.add_argument(
@@ -90,15 +120,21 @@ def main():
         return 1
 
     # Print configuration
+    judge_model = args.judge_model or args.model
+    judge_provider = args.judge_provider or args.provider
+    corrector_model = args.corrector_model or args.model
+    corrector_provider = args.corrector_provider or args.provider
+
     print("=" * 60)
     print("WAT MMT DATA CLEANING PIPELINE")
     print("=" * 60)
     print(f"CSV file: {csv_path}")
     print(f"Images directory: {images_dir}")
     print(f"Output directory: {output_dir}")
-    print(f"Provider: {args.provider}")
-    print(f"Model: {args.model}")
-    print(f"Checkpoint frequency: {args.checkpoint_freq}")
+    print("\nModel Configuration:")
+    print(f"  Judge: {judge_provider}/{judge_model}")
+    print(f"  Corrector: {corrector_provider}/{corrector_model}")
+    print(f"\nCheckpoint frequency: {args.checkpoint_freq}")
     if args.sample:
         print(f"Sample size: {args.sample} (testing mode)")
     print("=" * 60)
@@ -111,6 +147,10 @@ def main():
             output_dir=output_dir,
             model=args.model,
             provider=args.provider,
+            judge_model=args.judge_model,
+            judge_provider=args.judge_provider,
+            corrector_model=args.corrector_model,
+            corrector_provider=args.corrector_provider,
             checkpoint_frequency=args.checkpoint_freq,
             sample_size=args.sample,
         )
