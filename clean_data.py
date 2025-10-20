@@ -47,7 +47,10 @@ def main():
         "--model",
         type=str,
         default="gpt-4o-mini",
-        help="Default model name (used if --judge-model or --corrector-model not specified)",
+        help=(
+            "Default model name (used if --judge-model or "
+            "--corrector-model not specified)"
+        ),
     )
 
     parser.add_argument(
@@ -55,14 +58,20 @@ def main():
         type=str,
         default="openai",
         choices=["openai", "google"],
-        help="Default LLM provider (used if --judge-provider or --corrector-provider not specified)",
+        help=(
+            "Default LLM provider (used if --judge-provider or "
+            "--corrector-provider not specified)"
+        ),
     )
 
     parser.add_argument(
         "--judge-model",
         type=str,
         default=None,
-        help="Model for judge (e.g., gpt-4o-mini, gemini-1.5-flash). If not set, uses --model",
+        help=(
+            "Model for judge (e.g., gpt-4o-mini, gemini-1.5-flash). "
+            "If not set, uses --model"
+        ),
     )
 
     parser.add_argument(
@@ -77,7 +86,10 @@ def main():
         "--corrector-model",
         type=str,
         default=None,
-        help="Model for corrector (e.g., gpt-4o, gemini-1.5-pro). If not set, uses --model",
+        help=(
+            "Model for corrector (e.g., gpt-4o, gemini-1.5-pro). "
+            "If not set, uses --model"
+        ),
     )
 
     parser.add_argument(
