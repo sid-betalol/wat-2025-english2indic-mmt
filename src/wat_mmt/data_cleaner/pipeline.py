@@ -202,7 +202,7 @@ class DataCleaningPipeline:
 
         if is_missing:
             # Route directly to LLM corrector
-            correction = await self.corrector(
+            correction = await self.corrector.acall(
                 image=image,
                 english_caption=english_caption,
                 target_language=language,
@@ -220,7 +220,7 @@ class DataCleaningPipeline:
             }
 
         # Step 2: Judge the caption
-        judgment = await self.judge(
+        judgment = await self.judge.acall(
             image=image,
             english_caption=english_caption,
             target_caption=str(target_caption),
@@ -261,7 +261,7 @@ class DataCleaningPipeline:
 
         elif judgment.reason == "visual_context_needed":
             # Use LLM corrector (reuse temp file path)
-            correction = await self.corrector(
+            correction = await self.corrector.acall(
                 image=image,
                 english_caption=english_caption,
                 target_language=language,
@@ -444,8 +444,9 @@ class DataCleaningPipeline:
             ]
 
             # Process with async progress tracking
-            for coro in tqdm.asyncio.tqdm.as_completed(
-                tasks,
+            completed_tasks = asyncio.as_completed(tasks)
+            for coro in tqdm(
+                completed_tasks,
                 total=len(tasks),
                 desc="Processing",
             ):
