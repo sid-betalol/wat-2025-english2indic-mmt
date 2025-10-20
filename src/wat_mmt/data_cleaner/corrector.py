@@ -58,9 +58,13 @@ class VisualCaptionCorrector(dspy.Module):
         super().__init__()
         if lm:
             with dspy.context(lm=lm):
-                self.corrector = dspy.ChainOfThought(VisualCaptionCorrectionSignature)
+                self.corrector = dspy.ChainOfThought(
+                    VisualCaptionCorrectionSignature
+                )
         else:
-            self.corrector = dspy.ChainOfThought(VisualCaptionCorrectionSignature)
+            self.corrector = dspy.ChainOfThought(
+                VisualCaptionCorrectionSignature
+            )
         self.lm = lm
 
     async def aforward(
@@ -88,7 +92,9 @@ class VisualCaptionCorrector(dspy.Module):
         # Use provided temp path or create new one
         should_cleanup = False
         if temp_image_path is None:
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(
+                suffix=".png", delete=False
+            ) as tmp_file:
                 tmp_path = Path(tmp_file.name)
                 image.save(tmp_path, format="PNG")
                 should_cleanup = True
@@ -102,14 +108,16 @@ class VisualCaptionCorrector(dspy.Module):
                         image=dspy.Image(url=str(tmp_path)),
                         english_caption=english_caption,
                         target_language=target_language,
-                        original_target_caption=original_target_caption or "[MISSING]",
+                        original_target_caption=original_target_caption
+                        or "[MISSING]",
                     )
             else:
                 result = await self.corrector.acall(
                     image=dspy.Image(url=str(tmp_path)),
                     english_caption=english_caption,
                     target_language=target_language,
-                    original_target_caption=original_target_caption or "[MISSING]",
+                    original_target_caption=original_target_caption
+                    or "[MISSING]",
                 )
         finally:
             # Clean up temporary file only if we created it
