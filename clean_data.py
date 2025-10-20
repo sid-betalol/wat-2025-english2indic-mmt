@@ -47,7 +47,15 @@ def main():
         "--model",
         type=str,
         default="gpt-4o-mini",
-        help="OpenAI model to use (gpt-4o-mini, gpt-4o, etc.)",
+        help="Model name (e.g., gpt-4o-mini, gemini-1.5-flash, gemini-1.5-pro)",
+    )
+
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default="openai",
+        choices=["openai", "google"],
+        help="LLM provider to use",
     )
 
     parser.add_argument(
@@ -88,6 +96,7 @@ def main():
     print(f"CSV file: {csv_path}")
     print(f"Images directory: {images_dir}")
     print(f"Output directory: {output_dir}")
+    print(f"Provider: {args.provider}")
     print(f"Model: {args.model}")
     print(f"Checkpoint frequency: {args.checkpoint_freq}")
     if args.sample:
@@ -101,6 +110,7 @@ def main():
             images_dir=images_dir,
             output_dir=output_dir,
             model=args.model,
+            provider=args.provider,
             checkpoint_frequency=args.checkpoint_freq,
             sample_size=args.sample,
         )

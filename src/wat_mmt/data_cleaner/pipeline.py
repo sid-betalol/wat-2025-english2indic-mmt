@@ -44,6 +44,7 @@ class DataCleaningPipeline:
         images_dir: str | Path,
         output_dir: str | Path,
         model: str = "gpt-4o-mini",
+        provider: str = "openai",
         checkpoint_frequency: int = 100,
         sample_size: int | None = None,
     ):
@@ -53,7 +54,8 @@ class DataCleaningPipeline:
             csv_path: Path to the combined CSV file
             images_dir: Directory containing cropped images
             output_dir: Directory to save outputs
-            model: OpenAI model to use for DSPy
+            model: Model name to use (e.g., gpt-4o-mini, gemini-1.5-flash)
+            provider: LLM provider ('openai' or 'google')
             checkpoint_frequency: Save checkpoint every N examples
             sample_size: If set, only process first N examples (for testing)
         """
@@ -69,17 +71,34 @@ class DataCleaningPipeline:
         # Load environment variables
         load_dotenv()
 
-        # Initialize DSPy with OpenAI
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
+        # Initialize DSPy with the specified provider
+        provider = provider.lower()
+        if provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "OPENAI_API_KEY not found in environment. "
+                    "Please create a .env file with your API key."
+                )
+            # Configure DSPy with OpenAI (DSPy 3.0 API)
+            lm = dspy.LM(f"openai/{model}", api_key=api_key, max_tokens=1000)
+        elif provider == "google":
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "GEMINI_API_KEY not found in environment. "
+                    "Please create a .env file with your API key."
+                )
+            # Configure DSPy with Google Gemini (uses gemini/ prefix in LiteLLM)
+            lm = dspy.LM(f"gemini/{model}", api_key=api_key, max_tokens=1000)
+        else:
             raise ValueError(
-                "OPENAI_API_KEY not found in environment. "
-                "Please create a .env file with your API key."
+                f"Unsupported provider: {provider}. "
+                "Choose 'openai' or 'google'."
             )
 
-        # Configure DSPy with OpenAI (DSPy 3.0 API)
+        # Configure DSPy
         # Cache is enabled by default for faster development/testing
-        lm = dspy.LM(f"openai/{model}", api_key=api_key, max_tokens=1000)
         dspy.configure(lm=lm)
 
         # Initialize modules
