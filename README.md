@@ -67,6 +67,7 @@ uv run clean_data.py [OPTIONS]
 --images PATH           # Images directory (default: cropped_images/train)
 --output PATH           # Output directory (default: cleaned_data)
 --checkpoint-freq N     # Save checkpoint every N examples (default: 100)
+--max-concurrent N      # Max concurrent API calls (default: 4)
 ```
 
 ## Output Format
@@ -88,7 +89,32 @@ odia_original, odia_corrected, odia_was_corrected, odia_reason, odia_confidence,
 ✅ **DSPy caching** - Fast re-runs on same data  
 ✅ **MPS acceleration** - Optimized for Apple Silicon  
 ✅ **Progress tracking** - Real-time progress bars and timing  
-✅ **Error handling** - Robust error recovery
+✅ **Error handling** - Robust error recovery  
+✅ **Concurrent processing** - Parallel API calls with rate limiting
+
+## Performance & Concurrency
+
+The pipeline uses **two-level concurrent processing** for maximum throughput:
+
+### Level 1: Row-Level Parallelism
+- Multiple image rows processed simultaneously
+- Uses `asyncio.TaskGroup` for concurrent execution
+- Progress tracked with `tqdm.asyncio` for real-time updates
+
+### Level 2: Language-Level Parallelism
+- Within each row, all 4 languages processed concurrently
+- Each language independently calls judge/corrector APIs
+
+### Rate Limiting
+- **Semaphore-based control** prevents API overload
+- `--max-concurrent N` limits total concurrent API calls (default: 4)
+- Example: 2 rows × 4 languages = 8 potential calls, but semaphore limits to 4 active at once
+
+### Performance Tips
+- **Increase concurrency** for faster processing: `--max-concurrent 8`
+- **Respect rate limits**: Check your API provider's limits
+- **Monitor costs**: More concurrency = faster but same total API calls
+- **Typical speed**: ~10-15 seconds per row with 4 concurrent tasks
 
 ## Project Structure
 

@@ -102,6 +102,13 @@ def main():
         help="Process only first N examples (for testing)",
     )
 
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=4,
+        help="Maximum number of concurrent API calls (default: 4)",
+    )
+
     args = parser.parse_args()
 
     # Convert to absolute paths
@@ -135,6 +142,7 @@ def main():
     print(f"  Judge: {judge_provider}/{judge_model}")
     print(f"  Corrector: {corrector_provider}/{corrector_model}")
     print(f"\nCheckpoint frequency: {args.checkpoint_freq}")
+    print(f"Max concurrent tasks: {args.max_concurrent}")
     if args.sample:
         print(f"Sample size: {args.sample} (testing mode)")
     print("=" * 60)
@@ -153,6 +161,7 @@ def main():
             corrector_provider=args.corrector_provider,
             checkpoint_frequency=args.checkpoint_freq,
             sample_size=args.sample,
+            max_concurrent_tasks=args.max_concurrent,
         )
 
         pipeline.run()
