@@ -83,8 +83,11 @@ class DataCleaningPipeline:
         self.checkpoint_frequency = checkpoint_frequency
         self.sample_size = sample_size
 
-        # Create semaphore for rate limiting concurrent tasks
+        # Create semaphore for rate limiting concurrent API calls
         self.semaphore = asyncio.Semaphore(max_concurrent_tasks)
+
+        # Create lock for thread-safe stats updates
+        self.stats_lock = asyncio.Lock()
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -102,7 +105,9 @@ class DataCleaningPipeline:
                         "OPENAI_API_KEY not found in environment. "
                         "Please create a .env file with your API key."
                     )
-                return dspy.LM(f"openai/{model_name}", api_key=api_key, max_tokens=1000)
+                return dspy.LM(
+                    f"openai/{model_name}", api_key=api_key, max_tokens=1000
+                )
             elif provider_name == "google":
                 api_key = os.getenv("GEMINI_API_KEY")
                 if not api_key:
@@ -110,7 +115,9 @@ class DataCleaningPipeline:
                         "GEMINI_API_KEY not found in environment. "
                         "Please create a .env file with your API key."
                     )
-                return dspy.LM(f"gemini/{model_name}", api_key=api_key, max_tokens=1000)
+                return dspy.LM(
+                    f"gemini/{model_name}", api_key=api_key, max_tokens=1000
+                )
             else:
                 raise ValueError(
                     f"Unsupported provider: {provider_name}. "
@@ -149,7 +156,9 @@ class DataCleaningPipeline:
 
         # Initialize tracking
         self.checkpoint_path = self.output_dir / "checkpoint.json"
-        self.processed_indices, self.stats = load_checkpoint(self.checkpoint_path)
+        self.processed_indices, self.stats = load_checkpoint(
+            self.checkpoint_path
+        )
         if not self.stats:
             self.stats = initialize_stats()
             self.stats["total_examples"] = len(self.df)
@@ -202,13 +211,14 @@ class DataCleaningPipeline:
 
         if is_missing:
             # Route directly to LLM corrector
-            correction = await self.corrector.acall(
-                image=image,
-                english_caption=english_caption,
-                target_language=language,
-                original_target_caption="",
-                temp_image_path=temp_image_path,
-            )
+            async with self.semaphore:
+                correction = await self.corrector.acall(
+                    image=image,
+                    english_caption=english_caption,
+                    target_language=language,
+                    original_target_caption="",
+                    temp_image_path=temp_image_path,
+                )
             return {
                 "original_target_caption": "",
                 "corrected_target_caption": correction.corrected_caption,
@@ -220,18 +230,21 @@ class DataCleaningPipeline:
             }
 
         # Step 2: Judge the caption
-        judgment = await self.judge.acall(
-            image=image,
-            english_caption=english_caption,
-            target_caption=str(target_caption),
-            target_language=language,
-            temp_image_path=temp_image_path,
-        )
+        async with self.semaphore:
+            judgment = await self.judge.acall(
+                image=image,
+                english_caption=english_caption,
+                target_caption=str(target_caption),
+                target_language=language,
+                temp_image_path=temp_image_path,
+            )
 
         # Step 3: Route based on judgment
         # Safe confidence conversion (handle None)
         confidence = (
-            float(judgment.confidence) if judgment.confidence is not None else 0.0
+            float(judgment.confidence)
+            if judgment.confidence is not None
+            else 0.0
         )
 
         if judgment.status == "correct":
@@ -261,13 +274,14 @@ class DataCleaningPipeline:
 
         elif judgment.reason == "visual_context_needed":
             # Use LLM corrector (reuse temp file path)
-            correction = await self.corrector.acall(
-                image=image,
-                english_caption=english_caption,
-                target_language=language,
-                original_target_caption=str(target_caption),
-                temp_image_path=temp_image_path,
-            )
+            async with self.semaphore:
+                correction = await self.corrector.acall(
+                    image=image,
+                    english_caption=english_caption,
+                    target_language=language,
+                    original_target_caption=str(target_caption),
+                    temp_image_path=temp_image_path,
+                )
             return {
                 "original_target_caption": target_caption,
                 "corrected_target_caption": correction.corrected_caption,
@@ -342,32 +356,34 @@ class DataCleaningPipeline:
         # (only if image exists)
         temp_image_path = None
         if image is not None:
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(
+                suffix=".png", delete=False
+            ) as tmp_file:
                 temp_image_path = Path(tmp_file.name)
                 image.save(temp_image_path, format="PNG")
 
         try:
-            # Process each language concurrently with semaphore rate limiting
-            async def process_language_with_semaphore(language: str):
-                """Process a single language with semaphore rate limiting."""
-                async with self.semaphore:
-                    lang_col = self.LANG_COLUMNS[language]
-                    target_caption = row[lang_col]
+            # Process each language concurrently
+            # (rate limiting is at API call level)
+            async def process_language(language: str):
+                """Process a single language."""
+                lang_col = self.LANG_COLUMNS[language]
+                target_caption = row[lang_col]
 
-                    result = await self.process_caption(
-                        image=image,
-                        image_path=image_path,
-                        english_caption=row["english_text"],
-                        target_caption=target_caption,
-                        language=language,
-                        temp_image_path=temp_image_path,
-                    )
-                    return language, result
+                result = await self.process_caption(
+                    image=image,
+                    image_path=image_path,
+                    english_caption=row["english_text"],
+                    target_caption=target_caption,
+                    language=language,
+                    temp_image_path=temp_image_path,
+                )
+                return language, result
 
             # Create task group and process all languages concurrently
             async with asyncio.TaskGroup() as tg:
                 tasks = [
-                    tg.create_task(process_language_with_semaphore(language))
+                    tg.create_task(process_language(language))
                     for language in self.LANGUAGES
                 ]
 
@@ -383,18 +399,27 @@ class DataCleaningPipeline:
                 combined_result[f"{prefix}_corrected"] = result[
                     "corrected_target_caption"
                 ]
-                combined_result[f"{prefix}_was_corrected"] = result["was_corrected"]
-                combined_result[f"{prefix}_reason"] = result["correction_reason"]
-                combined_result[f"{prefix}_confidence"] = result["judge_confidence"]
-                combined_result[f"{prefix}_explanation"] = result["judge_explanation"]
+                combined_result[f"{prefix}_was_corrected"] = result[
+                    "was_corrected"
+                ]
+                combined_result[f"{prefix}_reason"] = result[
+                    "correction_reason"
+                ]
+                combined_result[f"{prefix}_confidence"] = result[
+                    "judge_confidence"
+                ]
+                combined_result[f"{prefix}_explanation"] = result[
+                    "judge_explanation"
+                ]
 
-                # Update stats
-                update_stats(
-                    self.stats,
-                    language,
-                    result["was_corrected"],
-                    result["correction_reason"],
-                )
+                # Update stats (thread-safe)
+                async with self.stats_lock:
+                    update_stats(
+                        self.stats,
+                        language,
+                        result["was_corrected"],
+                        result["correction_reason"],
+                    )
 
             return combined_result
         finally:
@@ -478,7 +503,9 @@ class DataCleaningPipeline:
         except Exception as e:
             print(f"\nError during processing: {e}")
             # Save checkpoint on error
-            save_checkpoint(self.checkpoint_path, self.processed_indices, self.stats)
+            save_checkpoint(
+                self.checkpoint_path, self.processed_indices, self.stats
+            )
             raise
 
         # Save final results
@@ -498,13 +525,19 @@ class DataCleaningPipeline:
         print("=" * 60)
 
         print(f"\nTotal examples processed: {self.stats['total_examples']}")
-        print(f"Total corrections: {self.stats['overall']['total_corrections']}")
+        print(
+            f"Total corrections: {self.stats['overall']['total_corrections']}"
+        )
         print(
             f"  - Visual context needed: "
             f"{self.stats['overall']['visual_context_needed']}"
         )
-        print(f"  - Poor translation: {self.stats['overall']['poor_translation']}")
-        print(f"  - Missing caption: {self.stats['overall']['missing_caption']}")
+        print(
+            f"  - Poor translation: {self.stats['overall']['poor_translation']}"
+        )
+        print(
+            f"  - Missing caption: {self.stats['overall']['missing_caption']}"
+        )
 
         print("\nPer-Language Breakdown:")
         print("-" * 60)

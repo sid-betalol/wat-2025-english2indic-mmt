@@ -106,9 +106,10 @@ The pipeline uses **two-level concurrent processing** for maximum throughput:
 - Each language independently calls judge/corrector APIs
 
 ### Rate Limiting
-- **Semaphore-based control** prevents API overload
-- `--max-concurrent N` limits total concurrent API calls (default: 4)
-- Example: 2 rows × 4 languages = 8 potential calls, but semaphore limits to 4 active at once
+- **Semaphore-based control** wraps each API call to prevent overload
+- `--max-concurrent N` limits concurrent API calls across all rows/languages (default: 4)
+- Example: Processing 2 rows with 4 languages each → 8 concurrent language tasks, but only 4 API calls active at once
+- Each language task may make 1-2 API calls (judge + optional corrector), queued via semaphore
 
 ### Performance Tips
 - **Increase concurrency** for faster processing: `--max-concurrent 8`
