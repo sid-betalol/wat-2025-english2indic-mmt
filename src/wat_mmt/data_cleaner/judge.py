@@ -83,6 +83,7 @@ class CaptionJudge(dspy.Module):
         english_caption: str,
         target_caption: str,
         target_language: str,
+        temp_image_path: Path | None = None,
     ) -> dspy.Prediction:
         """Judge the quality of a target language caption.
 
@@ -91,6 +92,8 @@ class CaptionJudge(dspy.Module):
             english_caption: Original English caption
             target_caption: Caption in target language to evaluate
             target_language: Target language name
+            temp_image_path: Optional pre-saved temp file path
+                (optimization to avoid recreating temp files)
 
         Returns:
             DSPy Prediction with status, reason, confidence, and explanation
@@ -114,12 +117,17 @@ class CaptionJudge(dspy.Module):
                 ),
             )
 
-        # Save image to temporary file and pass path
-        with tempfile.NamedTemporaryFile(
-            suffix=".png", delete=False
-        ) as tmp_file:
-            tmp_path = Path(tmp_file.name)
-            image.save(tmp_path, format="PNG")
+        # Use provided temp path or create new one
+        should_cleanup = False
+        if temp_image_path is None:
+            with tempfile.NamedTemporaryFile(
+                suffix=".png", delete=False
+            ) as tmp_file:
+                tmp_path = Path(tmp_file.name)
+                image.save(tmp_path, format="PNG")
+                should_cleanup = True
+        else:
+            tmp_path = temp_image_path
 
         try:
             if self.lm:
@@ -138,7 +146,8 @@ class CaptionJudge(dspy.Module):
                     target_language=target_language,
                 )
         finally:
-            # Clean up temporary file
-            tmp_path.unlink(missing_ok=True)
+            # Clean up temporary file only if we created it
+            if should_cleanup:
+                tmp_path.unlink(missing_ok=True)
 
         return result

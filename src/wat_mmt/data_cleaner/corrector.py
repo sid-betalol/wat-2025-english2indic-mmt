@@ -73,6 +73,7 @@ class VisualCaptionCorrector(dspy.Module):
         english_caption: str,
         target_language: str,
         original_target_caption: str = "",
+        temp_image_path: Path | None = None,
     ) -> dspy.Prediction:
         """Generate corrected caption in target language.
 
@@ -81,17 +82,24 @@ class VisualCaptionCorrector(dspy.Module):
             english_caption: Original English caption
             target_language: Target language name
             original_target_caption: Original caption (possibly incorrect/
-            missing)
+                missing)
+            temp_image_path: Optional pre-saved temp file path
+                (optimization to avoid recreating temp files)
 
         Returns:
             DSPy Prediction with corrected_caption and explanation
         """
-        # Save image to temporary file and pass path
-        with tempfile.NamedTemporaryFile(
-            suffix=".png", delete=False
-        ) as tmp_file:
-            tmp_path = Path(tmp_file.name)
-            image.save(tmp_path, format="PNG")
+        # Use provided temp path or create new one
+        should_cleanup = False
+        if temp_image_path is None:
+            with tempfile.NamedTemporaryFile(
+                suffix=".png", delete=False
+            ) as tmp_file:
+                tmp_path = Path(tmp_file.name)
+                image.save(tmp_path, format="PNG")
+                should_cleanup = True
+        else:
+            tmp_path = temp_image_path
 
         try:
             if self.lm:
@@ -112,7 +120,8 @@ class VisualCaptionCorrector(dspy.Module):
                     or "[MISSING]",
                 )
         finally:
-            # Clean up temporary file
-            tmp_path.unlink(missing_ok=True)
+            # Clean up temporary file only if we created it
+            if should_cleanup:
+                tmp_path.unlink(missing_ok=True)
 
         return result

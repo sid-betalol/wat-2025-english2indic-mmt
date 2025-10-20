@@ -1,6 +1,7 @@
 """Main pipeline for data cleaning."""
 
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import ClassVar
@@ -158,33 +159,29 @@ class DataCleaningPipeline:
 
     def process_caption(
         self,
-        image_id: str,
+        image: Image.Image | None,
+        image_path: Path,
         english_caption: str,
         target_caption: str,
         language: str,
+        temp_image_path: Path | None,
     ) -> dict:
         """Process a single caption for a language.
 
         Args:
-            image_id: Image ID
+            image: Pre-loaded PIL Image (or None if not found)
+            image_path: Path to image file (for error messages)
             english_caption: English caption
             target_caption: Target language caption to evaluate
             language: Target language name
+            temp_image_path: Pre-created temp image file path
+                (None if image not found; optimization to reuse across ops)
 
         Returns:
             Dictionary with processing results
         """
-        # Load image
-        image_path = self.images_dir / f"{image_id}.jpg"
-        if not image_path.exists():
-            # Try other common extensions
-            for ext in [".png", ".jpeg", ".JPG", ".PNG", ".JPEG"]:
-                alt_path = self.images_dir / f"{image_id}{ext}"
-                if alt_path.exists():
-                    image_path = alt_path
-                    break
-
-        if not image_path.exists():
+        # Check if image was loaded successfully
+        if image is None:
             print(f"Warning: Image not found: {image_path}")
             return {
                 "original_target_caption": target_caption,
@@ -204,12 +201,12 @@ class DataCleaningPipeline:
 
         if is_missing:
             # Route directly to LLM corrector
-            image = load_image(image_path)
             correction = self.corrector(
                 image=image,
                 english_caption=english_caption,
                 target_language=language,
                 original_target_caption="",
+                temp_image_path=temp_image_path,
             )
             return {
                 "original_target_caption": "",
@@ -222,12 +219,12 @@ class DataCleaningPipeline:
             }
 
         # Step 2: Judge the caption
-        image = load_image(image_path)
         judgment = self.judge(
             image=image,
             english_caption=english_caption,
             target_caption=str(target_caption),
             target_language=language,
+            temp_image_path=temp_image_path,
         )
 
         # Step 3: Route based on judgment
@@ -257,14 +254,13 @@ class DataCleaningPipeline:
             }
 
         elif judgment.reason == "visual_context_needed":
-            # Use LLM corrector (reload image if needed)
-            if not isinstance(image, Image.Image):
-                image = load_image(image_path)
+            # Use LLM corrector (reuse temp file path)
             correction = self.corrector(
                 image=image,
                 english_caption=english_caption,
                 target_language=language,
                 original_target_caption=str(target_caption),
+                temp_image_path=temp_image_path,
             )
             return {
                 "original_target_caption": target_caption,
@@ -322,42 +318,79 @@ class DataCleaningPipeline:
             "english_caption": row["english_text"],
         }
 
-        # Process each language and add as prefixed columns
-        for language in self.LANGUAGES:
-            lang_col = self.LANG_COLUMNS[language]
-            target_caption = row[lang_col]
+        # OPTIMIZATION: Load image once for all languages
+        image_id = str(row["image_id"])
+        image_path = self.images_dir / f"{image_id}.jpg"
+        if not image_path.exists():
+            # Try other common extensions
+            for ext in [".png", ".jpeg", ".JPG", ".PNG", ".JPEG"]:
+                alt_path = self.images_dir / f"{image_id}{ext}"
+                if alt_path.exists():
+                    image_path = alt_path
+                    break
 
-            result = self.process_caption(
-                image_id=str(row["image_id"]),
-                english_caption=row["english_text"],
-                target_caption=target_caption,
-                language=language,
-            )
+        # Load image once (or None if not found)
+        image = load_image(image_path) if image_path.exists() else None
 
-            # Add language-specific columns with prefix
-            prefix = language
-            combined_result[f"{prefix}_original"] = result[
-                "original_target_caption"
-            ]
-            combined_result[f"{prefix}_corrected"] = result[
-                "corrected_target_caption"
-            ]
-            combined_result[f"{prefix}_was_corrected"] = result["was_corrected"]
-            combined_result[f"{prefix}_reason"] = result["correction_reason"]
-            combined_result[f"{prefix}_confidence"] = result["judge_confidence"]
-            combined_result[f"{prefix}_explanation"] = result[
-                "judge_explanation"
-            ]
+        # OPTIMIZATION: Create temp file once for all 4 languages
+        # (only if image exists)
+        temp_image_path = None
+        if image is not None:
+            with tempfile.NamedTemporaryFile(
+                suffix=".png", delete=False
+            ) as tmp_file:
+                temp_image_path = Path(tmp_file.name)
+                image.save(temp_image_path, format="PNG")
 
-            # Update stats
-            update_stats(
-                self.stats,
-                language,
-                result["was_corrected"],
-                result["correction_reason"],
-            )
+        try:
+            # Process each language and add as prefixed columns
+            for language in self.LANGUAGES:
+                lang_col = self.LANG_COLUMNS[language]
+                target_caption = row[lang_col]
 
-        return combined_result
+                result = self.process_caption(
+                    image=image,
+                    image_path=image_path,
+                    english_caption=row["english_text"],
+                    target_caption=target_caption,
+                    language=language,
+                    temp_image_path=temp_image_path,
+                )
+
+                # Add language-specific columns with prefix
+                prefix = language
+                combined_result[f"{prefix}_original"] = result[
+                    "original_target_caption"
+                ]
+                combined_result[f"{prefix}_corrected"] = result[
+                    "corrected_target_caption"
+                ]
+                combined_result[f"{prefix}_was_corrected"] = result[
+                    "was_corrected"
+                ]
+                combined_result[f"{prefix}_reason"] = result[
+                    "correction_reason"
+                ]
+                combined_result[f"{prefix}_confidence"] = result[
+                    "judge_confidence"
+                ]
+                combined_result[f"{prefix}_explanation"] = result[
+                    "judge_explanation"
+                ]
+
+                # Update stats
+                update_stats(
+                    self.stats,
+                    language,
+                    result["was_corrected"],
+                    result["correction_reason"],
+                )
+
+            return combined_result
+        finally:
+            # Clean up temp file (created once for all languages)
+            if temp_image_path and temp_image_path.exists():
+                temp_image_path.unlink(missing_ok=True)
 
     def run(self) -> None:
         """Run the complete pipeline."""
