@@ -67,7 +67,7 @@ class VisualCaptionCorrector(dspy.Module):
             )
         self.lm = lm
 
-    def forward(
+    async def aforward(
         self,
         image: Image.Image,
         english_caption: str,
@@ -104,7 +104,7 @@ class VisualCaptionCorrector(dspy.Module):
         try:
             if self.lm:
                 with dspy.context(lm=self.lm):
-                    result = self.corrector(
+                    result = await self.corrector.acall(
                         image=dspy.Image(url=str(tmp_path)),
                         english_caption=english_caption,
                         target_language=target_language,
@@ -112,7 +112,7 @@ class VisualCaptionCorrector(dspy.Module):
                         or "[MISSING]",
                     )
             else:
-                result = self.corrector(
+                result = await self.corrector.acall(
                     image=dspy.Image(url=str(tmp_path)),
                     english_caption=english_caption,
                     target_language=target_language,

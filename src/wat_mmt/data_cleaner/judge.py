@@ -42,9 +42,7 @@ class CaptionJudgment(dspy.Signature):
     # Inputs
     image: dspy.Image = dspy.InputField(desc="Cropped image region")
     english_caption: str = dspy.InputField(desc="Original English caption")
-    target_caption: str = dspy.InputField(
-        desc="Caption in target language to evaluate"
-    )
+    target_caption: str = dspy.InputField(desc="Caption in target language to evaluate")
     target_language: str = dspy.InputField(
         desc="Target language (hindi, bengali, malayalam, odia)"
     )
@@ -77,7 +75,7 @@ class CaptionJudge(dspy.Module):
             self.judge = dspy.ChainOfThought(CaptionJudgment)
         self.lm = lm
 
-    def forward(
+    async def aforward(
         self,
         image: Image.Image,
         english_caption: str,
@@ -120,9 +118,7 @@ class CaptionJudge(dspy.Module):
         # Use provided temp path or create new one
         should_cleanup = False
         if temp_image_path is None:
-            with tempfile.NamedTemporaryFile(
-                suffix=".png", delete=False
-            ) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
                 tmp_path = Path(tmp_file.name)
                 image.save(tmp_path, format="PNG")
                 should_cleanup = True
@@ -132,14 +128,14 @@ class CaptionJudge(dspy.Module):
         try:
             if self.lm:
                 with dspy.context(lm=self.lm):
-                    result = self.judge(
+                    result = await self.judge.acall(
                         image=dspy.Image(url=str(tmp_path)),
                         english_caption=english_caption,
                         target_caption=target_caption,
                         target_language=target_language,
                     )
             else:
-                result = self.judge(
+                result = await self.judge.acall(
                     image=dspy.Image(url=str(tmp_path)),
                     english_caption=english_caption,
                     target_caption=target_caption,

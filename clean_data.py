@@ -47,7 +47,10 @@ def main():
         "--model",
         type=str,
         default="gpt-4o-mini",
-        help="Default model name (used if --judge-model or --corrector-model not specified)",
+        help=(
+            "Default model name (used if --judge-model or "
+            "--corrector-model not specified)"
+        ),
     )
 
     parser.add_argument(
@@ -55,14 +58,20 @@ def main():
         type=str,
         default="openai",
         choices=["openai", "google"],
-        help="Default LLM provider (used if --judge-provider or --corrector-provider not specified)",
+        help=(
+            "Default LLM provider (used if --judge-provider or "
+            "--corrector-provider not specified)"
+        ),
     )
 
     parser.add_argument(
         "--judge-model",
         type=str,
         default=None,
-        help="Model for judge (e.g., gpt-4o-mini, gemini-1.5-flash). If not set, uses --model",
+        help=(
+            "Model for judge (e.g., gpt-4o-mini, gemini-1.5-flash). "
+            "If not set, uses --model"
+        ),
     )
 
     parser.add_argument(
@@ -77,7 +86,10 @@ def main():
         "--corrector-model",
         type=str,
         default=None,
-        help="Model for corrector (e.g., gpt-4o, gemini-1.5-pro). If not set, uses --model",
+        help=(
+            "Model for corrector (e.g., gpt-4o, gemini-1.5-pro). "
+            "If not set, uses --model"
+        ),
     )
 
     parser.add_argument(
@@ -100,6 +112,13 @@ def main():
         type=int,
         default=None,
         help="Process only first N examples (for testing)",
+    )
+
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=4,
+        help="Maximum number of concurrent API calls (default: 4)",
     )
 
     args = parser.parse_args()
@@ -135,6 +154,7 @@ def main():
     print(f"  Judge: {judge_provider}/{judge_model}")
     print(f"  Corrector: {corrector_provider}/{corrector_model}")
     print(f"\nCheckpoint frequency: {args.checkpoint_freq}")
+    print(f"Max concurrent tasks: {args.max_concurrent}")
     if args.sample:
         print(f"Sample size: {args.sample} (testing mode)")
     print("=" * 60)
@@ -153,6 +173,7 @@ def main():
             corrector_provider=args.corrector_provider,
             checkpoint_frequency=args.checkpoint_freq,
             sample_size=args.sample,
+            max_concurrent_tasks=args.max_concurrent,
         )
 
         pipeline.run()

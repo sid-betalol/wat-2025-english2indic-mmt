@@ -1,5 +1,6 @@
 """Main pipeline for data cleaning."""
 
+import asyncio
 import os
 import tempfile
 import time
@@ -52,6 +53,7 @@ class DataCleaningPipeline:
         corrector_provider: str | None = None,
         checkpoint_frequency: int = 100,
         sample_size: int | None = None,
+        max_concurrent_tasks: int = 4,
     ):
         """Initialize the data cleaning pipeline.
 
@@ -72,12 +74,20 @@ class DataCleaningPipeline:
                 (if None, uses default provider)
             checkpoint_frequency: Save checkpoint every N examples
             sample_size: If set, only process first N examples (for testing)
+            max_concurrent_tasks: Maximum number of concurrent language
+                processing tasks (default: 4)
         """
         self.csv_path = Path(csv_path)
         self.images_dir = Path(images_dir)
         self.output_dir = Path(output_dir)
         self.checkpoint_frequency = checkpoint_frequency
         self.sample_size = sample_size
+
+        # Create semaphore for rate limiting concurrent API calls
+        self.semaphore = asyncio.Semaphore(max_concurrent_tasks)
+
+        # Create lock for thread-safe stats updates
+        self.stats_lock = asyncio.Lock()
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -157,7 +167,7 @@ class DataCleaningPipeline:
 
         print("Pipeline initialized successfully!")
 
-    def process_caption(
+    async def process_caption(
         self,
         image: Image.Image | None,
         image_path: Path,
@@ -201,13 +211,14 @@ class DataCleaningPipeline:
 
         if is_missing:
             # Route directly to LLM corrector
-            correction = self.corrector(
-                image=image,
-                english_caption=english_caption,
-                target_language=language,
-                original_target_caption="",
-                temp_image_path=temp_image_path,
-            )
+            async with self.semaphore:
+                correction = await self.corrector.acall(
+                    image=image,
+                    english_caption=english_caption,
+                    target_language=language,
+                    original_target_caption="",
+                    temp_image_path=temp_image_path,
+                )
             return {
                 "original_target_caption": "",
                 "corrected_target_caption": correction.corrected_caption,
@@ -219,13 +230,14 @@ class DataCleaningPipeline:
             }
 
         # Step 2: Judge the caption
-        judgment = self.judge(
-            image=image,
-            english_caption=english_caption,
-            target_caption=str(target_caption),
-            target_language=language,
-            temp_image_path=temp_image_path,
-        )
+        async with self.semaphore:
+            judgment = await self.judge.acall(
+                image=image,
+                english_caption=english_caption,
+                target_caption=str(target_caption),
+                target_language=language,
+                temp_image_path=temp_image_path,
+            )
 
         # Step 3: Route based on judgment
         # Safe confidence conversion (handle None)
@@ -262,13 +274,14 @@ class DataCleaningPipeline:
 
         elif judgment.reason == "visual_context_needed":
             # Use LLM corrector (reuse temp file path)
-            correction = self.corrector(
-                image=image,
-                english_caption=english_caption,
-                target_language=language,
-                original_target_caption=str(target_caption),
-                temp_image_path=temp_image_path,
-            )
+            async with self.semaphore:
+                correction = await self.corrector.acall(
+                    image=image,
+                    english_caption=english_caption,
+                    target_language=language,
+                    original_target_caption=str(target_caption),
+                    temp_image_path=temp_image_path,
+                )
             return {
                 "original_target_caption": target_caption,
                 "corrected_target_caption": correction.corrected_caption,
@@ -305,7 +318,7 @@ class DataCleaningPipeline:
                 "judge_explanation": judgment.explanation,
             }
 
-    def process_row(self, idx: int, row: pd.Series) -> dict:
+    async def process_row(self, idx: int, row: pd.Series) -> dict:
         """Process a single row (all languages).
 
         Args:
@@ -350,12 +363,14 @@ class DataCleaningPipeline:
                 image.save(temp_image_path, format="PNG")
 
         try:
-            # Process each language and add as prefixed columns
-            for language in self.LANGUAGES:
+            # Process each language concurrently
+            # (rate limiting is at API call level)
+            async def process_language(language: str):
+                """Process a single language."""
                 lang_col = self.LANG_COLUMNS[language]
                 target_caption = row[lang_col]
 
-                result = self.process_caption(
+                result = await self.process_caption(
                     image=image,
                     image_path=image_path,
                     english_caption=row["english_text"],
@@ -363,6 +378,18 @@ class DataCleaningPipeline:
                     language=language,
                     temp_image_path=temp_image_path,
                 )
+                return language, result
+
+            # Create task group and process all languages concurrently
+            async with asyncio.TaskGroup() as tg:
+                tasks = [
+                    tg.create_task(process_language(language))
+                    for language in self.LANGUAGES
+                ]
+
+            # Collect results from completed tasks
+            for task in tasks:
+                language, result = task.result()
 
                 # Add language-specific columns with prefix
                 prefix = language
@@ -385,13 +412,14 @@ class DataCleaningPipeline:
                     "judge_explanation"
                 ]
 
-                # Update stats
-                update_stats(
-                    self.stats,
-                    language,
-                    result["was_corrected"],
-                    result["correction_reason"],
-                )
+                # Update stats (thread-safe)
+                async with self.stats_lock:
+                    update_stats(
+                        self.stats,
+                        language,
+                        result["was_corrected"],
+                        result["correction_reason"],
+                    )
 
             return combined_result
         finally:
@@ -399,32 +427,57 @@ class DataCleaningPipeline:
             if temp_image_path and temp_image_path.exists():
                 temp_image_path.unlink(missing_ok=True)
 
+    async def _process_row_with_tracking(
+        self, idx: int, row: pd.Series
+    ) -> tuple[int, dict, float]:
+        """Process a single row with timing.
+
+        Args:
+            idx: Row index
+            row: DataFrame row
+
+        Returns:
+            Tuple of (index, result dict, elapsed time)
+        """
+        start_time = time.time()
+        row_result = await self.process_row(idx, row)
+        elapsed = time.time() - start_time
+
+        return idx, row_result, elapsed
+
     def run(self) -> None:
         """Run the complete pipeline."""
+        asyncio.run(self._run_async())
+
+    async def _run_async(self) -> None:
+        """Async implementation of the pipeline."""
         print(f"\nProcessing {len(self.df)} examples...")
         print(f"Already processed: {len(self.processed_indices)} indices")
 
-        # Progress bar
-        pbar = tqdm(
-            total=len(self.df),
-            initial=len(self.processed_indices),
-            desc="Processing",
-        )
+        # Collect rows to process
+        rows_to_process = [
+            (idx, row)
+            for idx, row in self.df.iterrows()
+            if idx not in self.processed_indices
+        ]
 
-        for idx, row in self.df.iterrows():
-            # Skip if already processed
-            if idx in self.processed_indices:
-                continue
+        try:
+            # Create all tasks
+            tasks = [
+                self._process_row_with_tracking(idx, row)
+                for idx, row in rows_to_process
+            ]
 
-            try:
-                # Process row with timing
-                start_time = time.time()
-                row_result = self.process_row(idx, row)
-                elapsed = time.time() - start_time
+            # Process with async progress tracking
+            completed_tasks = asyncio.as_completed(tasks)
+            for coro in tqdm(
+                completed_tasks,
+                total=len(tasks),
+                desc="Processing",
+            ):
+                idx, row_result, elapsed = await coro
 
                 self.results.append(row_result)
-
-                # Mark as processed
                 self.processed_indices.append(idx)
 
                 # Show timing for first few examples
@@ -434,27 +487,26 @@ class DataCleaningPipeline:
                         f"(~{elapsed / 4:.2f}s per language)"
                     )
 
-                # Save checkpoint
+                # Save checkpoint periodically
                 if len(self.processed_indices) % self.checkpoint_frequency == 0:
                     save_checkpoint(
-                        self.checkpoint_path, self.processed_indices, self.stats
+                        self.checkpoint_path,
+                        self.processed_indices,
+                        self.stats,
                     )
                     # Also save intermediate results
                     save_results(
-                        self.results, self.output_dir / "results_partial.csv"
+                        self.results,
+                        self.output_dir / "results_partial.csv",
                     )
 
-                pbar.update(1)
-
-            except Exception as e:
-                print(f"\nError processing row {idx}: {e}")
-                # Save checkpoint on error
-                save_checkpoint(
-                    self.checkpoint_path, self.processed_indices, self.stats
-                )
-                raise
-
-        pbar.close()
+        except Exception as e:
+            print(f"\nError during processing: {e}")
+            # Save checkpoint on error
+            save_checkpoint(
+                self.checkpoint_path, self.processed_indices, self.stats
+            )
+            raise
 
         # Save final results
         print("\nSaving final results...")
