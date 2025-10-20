@@ -228,6 +228,13 @@ class DataCleaningPipeline:
         )
 
         # Step 3: Route based on judgment
+        # Safe confidence conversion (handle None)
+        confidence = (
+            float(judgment.confidence)
+            if judgment.confidence is not None
+            else 0.0
+        )
+
         if judgment.status == "correct":
             # Keep original
             return {
@@ -235,18 +242,18 @@ class DataCleaningPipeline:
                 "corrected_target_caption": target_caption,
                 "was_corrected": False,
                 "correction_reason": "none",
-                "judge_confidence": float(judgment.confidence),
+                "judge_confidence": confidence,
                 "judge_explanation": judgment.explanation,
             }
 
         # Skip correction if confidence is too low (uncertain judgments)
-        if judgment.status == "incorrect" and float(judgment.confidence) < 0.7:
+        if judgment.status == "incorrect" and confidence < 0.7:
             return {
                 "original_target_caption": target_caption,
                 "corrected_target_caption": target_caption,
                 "was_corrected": False,
                 "correction_reason": "low_confidence_skip",
-                "judge_confidence": float(judgment.confidence),
+                "judge_confidence": confidence,
                 "judge_explanation": (
                     f"Flagged as {judgment.reason} but low confidence - "
                     f"keeping original. {judgment.explanation}"
@@ -267,7 +274,7 @@ class DataCleaningPipeline:
                 "corrected_target_caption": correction.corrected_caption,
                 "was_corrected": True,
                 "correction_reason": "visual_context_needed",
-                "judge_confidence": float(judgment.confidence),
+                "judge_confidence": confidence,
                 "judge_explanation": judgment.explanation,
                 "correction_explanation": correction.explanation,
             }
@@ -282,7 +289,7 @@ class DataCleaningPipeline:
                 "corrected_target_caption": translation,
                 "was_corrected": True,
                 "correction_reason": "poor_translation",
-                "judge_confidence": float(judgment.confidence),
+                "judge_confidence": confidence,
                 "judge_explanation": judgment.explanation,
                 "correction_explanation": "Retranslated using IndicTrans2",
             }
@@ -294,7 +301,7 @@ class DataCleaningPipeline:
                 "corrected_target_caption": target_caption,
                 "was_corrected": False,
                 "correction_reason": "none",
-                "judge_confidence": float(judgment.confidence),
+                "judge_confidence": confidence,
                 "judge_explanation": judgment.explanation,
             }
 
