@@ -194,6 +194,20 @@ class DataCleaningPipeline:
                 "judge_explanation": judgment.explanation,
             }
 
+        # Skip correction if confidence is too low (uncertain judgments)
+        if judgment.status == "incorrect" and float(judgment.confidence) < 0.7:
+            return {
+                "original_target_caption": target_caption,
+                "corrected_target_caption": target_caption,
+                "was_corrected": False,
+                "correction_reason": "low_confidence_skip",
+                "judge_confidence": float(judgment.confidence),
+                "judge_explanation": (
+                    f"Flagged as {judgment.reason} but low confidence - "
+                    f"keeping original. {judgment.explanation}"
+                ),
+            }
+
         elif judgment.reason == "visual_context_needed":
             # Use LLM corrector (reload image if needed)
             if not isinstance(image, Image.Image):

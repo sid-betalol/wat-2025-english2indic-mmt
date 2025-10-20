@@ -14,7 +14,7 @@ class CaptionJudgment(dspy.Signature):
     Determine if the target language caption correctly represents what's
     shown in the image and accurately conveys the English caption meaning.
 
-    Common issues (Be STRICT - flag even slight inconsistencies):
+    Focus on MAJOR issues - ignore minor stylistic differences:
 
     1. VISUAL CONTEXT NEEDED: Translation depends on visual information
        - Ambiguous words with multiple meanings (e.g., "dish" = food/container)
@@ -24,12 +24,17 @@ class CaptionJudgment(dspy.Signature):
        - Object types/categories visible in image
 
     2. POOR TRANSLATION: Incorrect, incomplete, or unnatural
-       - Mistranslation or wrong meaning
-       - Missing/incomplete information
-       - Grammatical errors (gender, case, verb forms, postpositions)
-       - Unnatural phrasing (technically correct but awkward)
-       - Script errors (wrong script, mixing scripts)
-       - Cultural/contextual mistranslation
+       - Mistranslation or wrong meaning (semantic error)
+       - Missing key information from English
+       - Severe grammatical errors making it hard to understand
+       - Completely unnatural phrasing (not just stylistic preference)
+       - Wrong script or excessive script mixing
+
+    IGNORE these minor issues (mark as CORRECT):
+    - Minor punctuation differences (|, ., etc.)
+    - Optional articles or particles (a/the/one equivalents)
+    - Stylistic word order variations (both correct)
+    - Minor postposition variations if meaning is clear
 
     Empty captions: mark "incorrect" with "visual_context_needed"
     """
