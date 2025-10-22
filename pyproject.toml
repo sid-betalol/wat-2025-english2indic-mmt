@@ -23,6 +23,10 @@ dependencies = [
     "tqdm>=4.67.1",
     "pandas>=2.3.3",
     "sentencepiece>=0.2.1",
+    "peft>=0.17.1",
+    "datasets>=4.2.0",
+    "sacrebleu>=2.5.1",
+    "evaluate>=0.4.6",
 ]
 
 [project.optional-dependencies]
