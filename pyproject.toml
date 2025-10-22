@@ -27,6 +27,7 @@ dependencies = [
     "datasets>=4.2.0",
     "sacrebleu>=2.5.1",
     "evaluate>=0.4.6",
+    "ruff>=0.14.1",
 ]
 
 [project.optional-dependencies]

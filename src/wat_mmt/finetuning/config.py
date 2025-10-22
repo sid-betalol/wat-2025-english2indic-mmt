@@ -12,9 +12,7 @@ class LoRAConfig:
     r: int = 16  # Rank of the low-rank matrices
     lora_alpha: int = 32  # Scaling factor (typically 2*r)
     lora_dropout: float = 0.1  # Dropout probability
-    target_modules: list[str] = field(
-        default_factory=lambda: ["q_proj", "v_proj"]
-    )
+    target_modules: list[str] = field(default_factory=lambda: ["q_proj", "v_proj"])
     bias: str = "none"  # Bias handling: 'none', 'all', or 'lora_only'
     task_type: str = "SEQ_2_SEQ_LM"  # Task type for PEFT
 
@@ -32,9 +30,7 @@ class FinetuningConfig:
 
     # Data configuration
     train_data_path: Path = field(
-        default_factory=lambda: Path(
-            "combined_processed_data/combined_results.csv"
-        )
+        default_factory=lambda: Path("combined_processed_data/combined_results.csv")
     )
     dev_data_path: Path = field(
         default_factory=lambda: Path("combined_data/combined_dev.csv")
@@ -57,6 +53,7 @@ class FinetuningConfig:
         default_factory=lambda: Path("models/indictrans2-finetuned")
     )
     num_train_epochs: int = 3
+    max_steps: int = -1  # Override epochs if > 0
     per_device_train_batch_size: int = 8
     per_device_eval_batch_size: int = 16
     gradient_accumulation_steps: int = 2
@@ -69,6 +66,11 @@ class FinetuningConfig:
     fp16: bool = False  # Use mixed precision (set to False for Mac M2)
     bf16: bool = False  # Use bfloat16 (Mac M2 doesn't support this well)
     gradient_checkpointing: bool = False
+
+    # Multi-GPU settings
+    use_multi_gpu: bool = False  # Enable multi-GPU training
+    ddp_backend: str = "nccl"  # Distributed training backend (nccl for CUDA)
+    ddp_find_unused_parameters: bool = False  # Find unused parameters in DDP
 
     # Evaluation
     eval_steps: int = 500

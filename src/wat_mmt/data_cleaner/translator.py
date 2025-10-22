@@ -18,9 +18,7 @@ class IndicTranslator:
         "odia": "ory_Orya",
     }
 
-    def __init__(
-        self, model_name: str = "ai4bharat/indictrans2-en-indic-dist-200M"
-    ):
+    def __init__(self, model_name: str = "ai4bharat/indictrans2-en-indic-dist-200M"):
         """Initialize the translator.
 
         Args:
@@ -38,10 +36,11 @@ class IndicTranslator:
         Returns:
             Device string: 'mps', 'cuda', or 'cpu'
         """
-        if torch.backends.mps.is_available():
-            return "mps"
-        elif torch.cuda.is_available():
+
+        if torch.cuda.is_available():
             return "cuda"
+        elif torch.backends.mps.is_available():
+            return "mps"
         else:
             return "cpu"
 
@@ -83,9 +82,7 @@ class IndicTranslator:
         self.processor = IndicProcessor(inference=True)
         print("Model loaded successfully!")
 
-    def translate(
-        self, text: str, target_language: str, max_length: int = 256
-    ) -> str:
+    def translate(self, text: str, target_language: str, max_length: int = 256) -> str:
         """Translate English text to target Indian language.
 
         Args:
@@ -143,9 +140,7 @@ class IndicTranslator:
         )
 
         # Postprocess
-        translations = self.processor.postprocess_batch(
-            generated_text, lang=tgt_lang
-        )
+        translations = self.processor.postprocess_batch(generated_text, lang=tgt_lang)
 
         return translations[0] if translations else ""
 
@@ -208,8 +203,6 @@ class IndicTranslator:
         )
 
         # Postprocess
-        translations = self.processor.postprocess_batch(
-            generated_text, lang=tgt_lang
-        )
+        translations = self.processor.postprocess_batch(generated_text, lang=tgt_lang)
 
         return translations

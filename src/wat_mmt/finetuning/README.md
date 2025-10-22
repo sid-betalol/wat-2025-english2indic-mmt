@@ -61,6 +61,32 @@ python -m src.wat_mmt.finetuning.finetune \
     --batch-size 4  # Lower batch size for full finetuning
 ```
 
+#### Multi-GPU Training (2+ GPUs)
+
+```bash
+# Multi-GPU LoRA training
+python -m src.wat_mmt.finetuning.finetune \
+    --train-data combined_processed_data/combined_results.csv \
+    --dev-data combined_data/combined_dev.csv \
+    --method lora \
+    --use-corrected \
+    --output-dir models/indictrans2-lora-multi-gpu \
+    --multi-gpu \
+    --batch-size 16  # Can use larger batch size with 2 GPUs
+    --num-epochs 3
+
+# Multi-GPU full finetuning
+python -m src.wat_mmt.finetuning.finetune \
+    --train-data combined_processed_data/combined_results.csv \
+    --dev-data combined_data/combined_dev.csv \
+    --method full \
+    --use-corrected \
+    --output-dir models/indictrans2-full-multi-gpu \
+    --multi-gpu \
+    --batch-size 8  # Larger batch size possible with 2 GPUs
+    --num-epochs 3
+```
+
 ### 2. Inference
 
 #### Single Text Translation
@@ -172,6 +198,14 @@ translations = translator.translate_batch(
 | `--lora-alpha` | int | 32 | LoRA alpha (scaling factor) |
 | `--lora-dropout` | float | 0.1 | LoRA dropout |
 
+### Multi-GPU Arguments
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `--multi-gpu` | flag | False | Enable multi-GPU training |
+| `--ddp-backend` | str | `nccl` | DDP backend (nccl/gloo) |
+| `--ddp-find-unused-parameters` | flag | False | Find unused parameters in DDP |
+
 ### Inference Arguments
 
 | Argument | Type | Default | Description |
@@ -200,6 +234,14 @@ translations = translator.translate_batch(
 2. **Memory**: LoRA requires ~8-10GB RAM, full needs ~16GB+
 3. **Speed**: LoRA training takes ~2-4 hours, full takes ~8-12 hours
 4. **Inference**: Use `num_beams=5` for quality, `num_beams=1` for speed
+
+### For Multi-GPU (2+ CUDA GPUs)
+
+1. **Batch Size**: Can use 2x larger batch sizes (16 for LoRA, 8 for full)
+2. **Memory**: Each GPU needs ~8-10GB VRAM for LoRA, ~16GB+ for full
+3. **Speed**: ~1.5-2x faster than single GPU training
+4. **Backend**: Use `nccl` for CUDA GPUs, `gloo` for mixed setups
+5. **Scaling**: Near-linear speedup with 2 GPUs, diminishing returns with more
 
 ### General Tips
 

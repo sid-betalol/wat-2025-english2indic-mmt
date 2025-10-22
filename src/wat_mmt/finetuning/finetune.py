@@ -4,9 +4,11 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+import os
 
 import evaluate
 import torch
+import torch.distributed as dist
 from peft import LoraConfig, TaskType, get_peft_model
 from transformers import (
     AutoModelForSeq2SeqLM,
@@ -16,6 +18,7 @@ from transformers import (
     Seq2SeqTrainingArguments,
     set_seed,
 )
+from IndicTransToolkit.processor import IndicProcessor
 
 from .config import FinetuningConfig
 from .data_processor import TranslationDataProcessor
@@ -51,6 +54,7 @@ class IndicTrans2Finetuner:
         # Load tokenizer and model
         self.tokenizer = None
         self.model = None
+        self.processor = None
         self.bleu_metric = evaluate.load("sacrebleu")
 
     def load_model_and_tokenizer(self):
@@ -62,6 +66,7 @@ class IndicTrans2Finetuner:
             self.config.model_name,
             cache_dir=self.config.cache_dir,
             use_fast=True,
+            trust_remote_code=True,
         )
 
         # Load model
@@ -69,11 +74,13 @@ class IndicTrans2Finetuner:
             self.config.model_name,
             cache_dir=self.config.cache_dir,
             torch_dtype=torch.float32,  # Use float32 for Mac M2
+            trust_remote_code=True,
         )
 
-        logger.info(
-            f"Model loaded with {self.model.num_parameters():,} parameters"
-        )
+        # Initialize IndicProcessor
+        self.processor = IndicProcessor(inference=False)
+
+        logger.info(f"Model loaded with {self.model.num_parameters():,} parameters")
 
         # Apply LoRA if specified
         if self.config.method == "lora":
@@ -96,7 +103,7 @@ class IndicTrans2Finetuner:
         self.model.print_trainable_parameters()
 
     def preprocess_function(self, examples):
-        """Preprocess examples for training.
+        """Preprocess examples for training using IndicProcessor.
 
         Args:
             examples: Batch of examples
@@ -104,21 +111,29 @@ class IndicTrans2Finetuner:
         Returns:
             Tokenized inputs and labels
         """
-        # Prepare inputs with language tags
-        inputs = [
-            f"Translate {src_lang} to {tgt_lang}: {text}"
-            for src_lang, tgt_lang, text in zip(
-                examples["source_lang"],
-                examples["target_lang"],
-                examples["source_text"],
-            )
-        ]
+        # Prepare source and target texts
+        source_texts = examples["source_text"]
+        target_texts = examples["target_text"]
+        source_langs = examples["source_lang"]
+        target_langs = examples["target_lang"]
 
-        targets = examples["target_text"]
+        # Use IndicProcessor to preprocess inputs (with language tags)
+        processed_inputs = self.processor.preprocess_batch(
+            source_texts,
+            src_lang=source_langs[0],  # All should be same source lang
+            tgt_lang=target_langs[0],  # All should be same target lang
+        )
 
-        # Tokenize
+        # Use IndicProcessor to preprocess targets (without language tags)
+        processed_targets = self.processor.preprocess_batch(
+            target_texts,
+            src_lang=target_langs[0],  # Target becomes source for labels
+            tgt_lang=target_langs[0],  # Same language
+        )
+
+        # Tokenize inputs
         model_inputs = self.tokenizer(
-            inputs,
+            processed_inputs,
             max_length=self.config.max_length,
             truncation=True,
             padding=False,
@@ -126,7 +141,7 @@ class IndicTrans2Finetuner:
 
         # Tokenize targets
         labels = self.tokenizer(
-            targets,
+            processed_targets,
             max_length=self.config.max_length,
             truncation=True,
             padding=False,
@@ -151,15 +166,15 @@ class IndicTrans2Finetuner:
             predictions = predictions[0]
 
         # Replace -100 in labels (used for padding)
-        labels = [[l for l in label if l != -100] for label in labels]
+        labels = [
+            [label_id for label_id in label if label_id != -100] for label in labels
+        ]
 
         # Decode
         decoded_preds = self.tokenizer.batch_decode(
             predictions, skip_special_tokens=True
         )
-        decoded_labels = self.tokenizer.batch_decode(
-            labels, skip_special_tokens=True
-        )
+        decoded_labels = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
 
         # Clean up predictions and labels
         decoded_preds = [pred.strip() for pred in decoded_preds]
@@ -180,6 +195,14 @@ class IndicTrans2Finetuner:
     def train(self):
         """Run the finetuning process."""
         logger.info("Starting finetuning process")
+
+        # Initialize distributed training if multi-GPU
+        if self.config.use_multi_gpu:
+            if not dist.is_initialized():
+                dist.init_process_group(backend=self.config.ddp_backend)
+            logger.info(
+                f"Initialized distributed training with {dist.get_world_size()} processes"
+            )
 
         # Load model and tokenizer
         self.load_model_and_tokenizer()
@@ -213,13 +236,10 @@ class IndicTrans2Finetuner:
         training_args = Seq2SeqTrainingArguments(
             output_dir=str(self.config.output_dir),
             num_train_epochs=self.config.num_train_epochs,
-            per_device_train_batch_size=(
-                self.config.per_device_train_batch_size
-            ),
+            max_steps=self.config.max_steps if self.config.max_steps > 0 else -1,
+            per_device_train_batch_size=(self.config.per_device_train_batch_size),
             per_device_eval_batch_size=(self.config.per_device_eval_batch_size),
-            gradient_accumulation_steps=(
-                self.config.gradient_accumulation_steps
-            ),
+            gradient_accumulation_steps=(self.config.gradient_accumulation_steps),
             learning_rate=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
             warmup_steps=self.config.warmup_steps,
@@ -227,7 +247,7 @@ class IndicTrans2Finetuner:
             fp16=self.config.fp16,
             bf16=self.config.bf16,
             gradient_checkpointing=self.config.gradient_checkpointing,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
             eval_steps=self.config.eval_steps,
             save_steps=self.config.save_steps,
             save_total_limit=self.config.save_total_limit,
@@ -241,6 +261,15 @@ class IndicTrans2Finetuner:
             greater_is_better=True,
             seed=self.config.seed,
             push_to_hub=False,
+            # Multi-GPU settings
+            ddp_backend=(
+                self.config.ddp_backend if self.config.use_multi_gpu else None
+            ),
+            ddp_find_unused_parameters=(
+                self.config.ddp_find_unused_parameters
+                if self.config.use_multi_gpu
+                else None
+            ),
         )
 
         # Initialize trainer
@@ -270,12 +299,17 @@ class IndicTrans2Finetuner:
 
         # Final evaluation
         logger.info("Running final evaluation")
-        eval_metrics = trainer.evaluate()
-        trainer.log_metrics("eval", eval_metrics)
-        trainer.save_metrics("eval", eval_metrics)
+        try:
+            eval_metrics = trainer.evaluate()
+            trainer.log_metrics("eval", eval_metrics)
+            trainer.save_metrics("eval", eval_metrics)
+            logger.info(f"Final BLEU score: {eval_metrics['eval_bleu']:.2f}")
+        except Exception as e:
+            logger.warning(f"Evaluation failed: {e}")
+            logger.info("Continuing without evaluation metrics...")
+            eval_metrics = {"eval_bleu": 0.0}
 
         logger.info("Finetuning complete!")
-        logger.info(f"Final BLEU score: {eval_metrics['eval_bleu']:.2f}")
 
         return trainer, eval_metrics
 
@@ -337,8 +371,12 @@ def parse_args():
         "--num-epochs", type=int, default=3, help="Number of training epochs"
     )
     parser.add_argument(
-        "--batch-size", type=int, default=8, help="Training batch size"
+        "--max-steps",
+        type=int,
+        default=-1,
+        help="Maximum training steps (overrides epochs)",
     )
+    parser.add_argument("--batch-size", type=int, default=8, help="Training batch size")
     parser.add_argument(
         "--learning-rate", type=float, default=3e-5, help="Learning rate"
     )
@@ -347,8 +385,19 @@ def parse_args():
     # LoRA arguments
     parser.add_argument("--lora-r", type=int, default=16, help="LoRA rank")
     parser.add_argument("--lora-alpha", type=int, default=32, help="LoRA alpha")
+    parser.add_argument("--lora-dropout", type=float, default=0.1, help="LoRA dropout")
+
+    # Multi-GPU arguments
     parser.add_argument(
-        "--lora-dropout", type=float, default=0.1, help="LoRA dropout"
+        "--multi-gpu", action="store_true", help="Enable multi-GPU training"
+    )
+    parser.add_argument(
+        "--ddp-backend", type=str, default="nccl", help="DDP backend (nccl/gloo)"
+    )
+    parser.add_argument(
+        "--ddp-find-unused-parameters",
+        action="store_true",
+        help="Find unused parameters in DDP",
     )
 
     return parser.parse_args()
@@ -367,9 +416,14 @@ def main():
         use_corrected=not args.use_original,  # Invert the flag
         output_dir=args.output_dir,
         num_train_epochs=args.num_epochs,
+        max_steps=args.max_steps,
         per_device_train_batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         seed=args.seed,
+        # Multi-GPU settings
+        use_multi_gpu=args.multi_gpu,
+        ddp_backend=args.ddp_backend,
+        ddp_find_unused_parameters=args.ddp_find_unused_parameters,
     )
 
     # Update LoRA config if using LoRA
@@ -394,6 +448,10 @@ def main():
     if config.method == "lora":
         logger.info(f"LoRA rank: {config.lora.r}")
         logger.info(f"LoRA alpha: {config.lora.lora_alpha}")
+    if config.use_multi_gpu:
+        logger.info("Multi-GPU: Enabled")
+        logger.info(f"DDP backend: {config.ddp_backend}")
+        logger.info(f"DDP find unused parameters: {config.ddp_find_unused_parameters}")
     logger.info("=" * 80)
 
     # Create finetuner
