@@ -1,0 +1,55 @@
+{
+  "total_examples": 28928,
+  "per_language": {
+    "hindi": {
+      "total": 28928,
+      "missing_captions": 0,
+      "correct": 24201,
+      "corrected": 4727,
+      "correction_reasons": {
+        "visual_context_needed": 1314,
+        "poor_translation": 3412,
+        "missing_caption": 1
+      }
+    },
+    "bengali": {
+      "total": 28928,
+      "missing_captions": 0,
+      "correct": 24280,
+      "corrected": 4648,
+      "correction_reasons": {
+        "visual_context_needed": 1436,
+        "poor_translation": 3211,
+        "missing_caption": 1
+      }
+    },
+    "malayalam": {
+      "total": 28928,
+      "missing_captions": 0,
+      "correct": 21983,
+      "corrected": 6945,
+      "correction_reasons": {
+        "visual_context_needed": 1507,
+        "poor_translation": 5438,
+        "missing_caption": 0
+      }
+    },
+    "odia": {
+      "total": 28928,
+      "missing_captions": 0,
+      "correct": 25442,
+      "corrected": 3486,
+      "correction_reasons": {
+        "visual_context_needed": 1033,
+        "poor_translation": 2452,
+        "missing_caption": 1
+      }
+    }
+  },
+  "overall": {
+    "total_corrections": 19806,
+    "visual_context_needed": 5290,
+    "poor_translation": 14513,
+    "missing_caption": 3
+  }
+}
