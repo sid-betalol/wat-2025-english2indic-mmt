@@ -54,6 +54,7 @@ class DataCleaningPipeline:
         checkpoint_frequency: int = 100,
         sample_size: int | None = None,
         max_concurrent_tasks: int = 4,
+        max_tokens: int = 1000,
     ):
         """Initialize the data cleaning pipeline.
 
@@ -76,13 +77,14 @@ class DataCleaningPipeline:
             sample_size: If set, only process first N examples (for testing)
             max_concurrent_tasks: Maximum number of concurrent language
                 processing tasks (default: 4)
+            max_tokens: Maximum number of tokens for the models
         """
         self.csv_path = Path(csv_path)
         self.images_dir = Path(images_dir)
         self.output_dir = Path(output_dir)
         self.checkpoint_frequency = checkpoint_frequency
         self.sample_size = sample_size
-
+        self.max_tokens = max_tokens
         # Create semaphore for rate limiting concurrent API calls
         self.semaphore = asyncio.Semaphore(max_concurrent_tasks)
 
@@ -106,7 +108,7 @@ class DataCleaningPipeline:
                         "Please create a .env file with your API key."
                     )
                 return dspy.LM(
-                    f"openai/{model_name}", api_key=api_key, max_tokens=1000
+                    f"openai/{model_name}", api_key=api_key, max_tokens=self.max_tokens
                 )
             elif provider_name == "google":
                 api_key = os.getenv("GEMINI_API_KEY")
@@ -116,7 +118,7 @@ class DataCleaningPipeline:
                         "Please create a .env file with your API key."
                     )
                 return dspy.LM(
-                    f"gemini/{model_name}", api_key=api_key, max_tokens=1000
+                    f"gemini/{model_name}", api_key=api_key, max_tokens=self.max_tokens
                 )
             else:
                 raise ValueError(
@@ -156,9 +158,7 @@ class DataCleaningPipeline:
 
         # Initialize tracking
         self.checkpoint_path = self.output_dir / "checkpoint.json"
-        self.processed_indices, self.stats = load_checkpoint(
-            self.checkpoint_path
-        )
+        self.processed_indices, self.stats = load_checkpoint(self.checkpoint_path)
         if not self.stats:
             self.stats = initialize_stats()
             self.stats["total_examples"] = len(self.df)
@@ -242,9 +242,7 @@ class DataCleaningPipeline:
         # Step 3: Route based on judgment
         # Safe confidence conversion (handle None)
         confidence = (
-            float(judgment.confidence)
-            if judgment.confidence is not None
-            else 0.0
+            float(judgment.confidence) if judgment.confidence is not None else 0.0
         )
 
         if judgment.status == "correct":
@@ -356,9 +354,7 @@ class DataCleaningPipeline:
         # (only if image exists)
         temp_image_path = None
         if image is not None:
-            with tempfile.NamedTemporaryFile(
-                suffix=".png", delete=False
-            ) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
                 temp_image_path = Path(tmp_file.name)
                 image.save(temp_image_path, format="PNG")
 
@@ -399,18 +395,10 @@ class DataCleaningPipeline:
                 combined_result[f"{prefix}_corrected"] = result[
                     "corrected_target_caption"
                 ]
-                combined_result[f"{prefix}_was_corrected"] = result[
-                    "was_corrected"
-                ]
-                combined_result[f"{prefix}_reason"] = result[
-                    "correction_reason"
-                ]
-                combined_result[f"{prefix}_confidence"] = result[
-                    "judge_confidence"
-                ]
-                combined_result[f"{prefix}_explanation"] = result[
-                    "judge_explanation"
-                ]
+                combined_result[f"{prefix}_was_corrected"] = result["was_corrected"]
+                combined_result[f"{prefix}_reason"] = result["correction_reason"]
+                combined_result[f"{prefix}_confidence"] = result["judge_confidence"]
+                combined_result[f"{prefix}_explanation"] = result["judge_explanation"]
 
                 # Update stats (thread-safe)
                 async with self.stats_lock:
@@ -503,9 +491,7 @@ class DataCleaningPipeline:
         except Exception as e:
             print(f"\nError during processing: {e}")
             # Save checkpoint on error
-            save_checkpoint(
-                self.checkpoint_path, self.processed_indices, self.stats
-            )
+            save_checkpoint(self.checkpoint_path, self.processed_indices, self.stats)
             raise
 
         # Save final results
@@ -525,19 +511,13 @@ class DataCleaningPipeline:
         print("=" * 60)
 
         print(f"\nTotal examples processed: {self.stats['total_examples']}")
-        print(
-            f"Total corrections: {self.stats['overall']['total_corrections']}"
-        )
+        print(f"Total corrections: {self.stats['overall']['total_corrections']}")
         print(
             f"  - Visual context needed: "
             f"{self.stats['overall']['visual_context_needed']}"
         )
-        print(
-            f"  - Poor translation: {self.stats['overall']['poor_translation']}"
-        )
-        print(
-            f"  - Missing caption: {self.stats['overall']['missing_caption']}"
-        )
+        print(f"  - Poor translation: {self.stats['overall']['poor_translation']}")
+        print(f"  - Missing caption: {self.stats['overall']['missing_caption']}")
 
         print("\nPer-Language Breakdown:")
         print("-" * 60)
