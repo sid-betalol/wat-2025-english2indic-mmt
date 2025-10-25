@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Complete Training Script for IndicTrans2 on 2 GPUs
-# Handles disk space issues and runs both LoRA and full finetuning
+# Complete Training Script for IndicTrans2 on 2 GPUs - ORIGINAL DATA
+# Handles disk space issues and runs both LoRA and full finetuning on original data
 
 set -e
 
 echo "================================================================"
-echo "IndicTrans2 Complete Training Pipeline"
+echo "IndicTrans2 Complete Training Pipeline - ORIGINAL DATA"
 echo "================================================================"
 echo "Start time: $(date)"
 echo ""
@@ -46,7 +46,7 @@ run_training() {
     fi
     
     cmd="$cmd --method $method"
-    cmd="$cmd --use-corrected"
+    cmd="$cmd --use-original"  # Use original data instead of corrected
     cmd="$cmd --output-dir $output_dir"
     cmd="$cmd --num-epochs $epochs"
     cmd="$cmd --batch-size $batch_size"
@@ -88,10 +88,12 @@ run_training() {
 }
 
 # Training 1: Full Multi-GPU
+echo ""
 echo "================================================================="
-echo "TRAINING 2/2: Full Multi-GPU"
+echo "TRAINING 2/2: LoRA Multi-GPU - ORIGINAL DATA"
 echo "================================================================="
-run_training "full" "true" "16" "models/indictrans2-full-2gpu-$TIMESTAMP" "3"
+run_training "lora" "true" "16" "models/indictrans2-lora-original-2gpu-$TIMESTAMP" "3"
+
 
 # Wait between trainings
 echo ""
@@ -99,24 +101,26 @@ echo "Waiting 30 seconds before next training..."
 sleep 30
 
 # Training 2: LoRA Multi-GPU
-echo ""
 echo "================================================================="
-echo "TRAINING 1/2: LoRA Multi-GPU"
+echo "TRAINING 1/2: Full Multi-GPU - ORIGINAL DATA"
 echo "================================================================="
-run_training "lora" "true" "16" "models/indictrans2-lora-2gpu-$TIMESTAMP" "3"
+run_training "full" "true" "16" "models/indictrans2-full-original-2gpu-$TIMESTAMP" "3"
 
 
 
 # Final summary
 echo ""
 echo "================================================================="
-echo "TRAINING PIPELINE COMPLETE"
+echo "TRAINING PIPELINE COMPLETE - ORIGINAL DATA"
 echo "================================================================="
 echo "End time: $(date)"
 echo ""
 echo "Models saved in:"
-echo "  - models/indictrans2-lora-2gpu-$TIMESTAMP/"
-echo "  - models/indictrans2-full-2gpu-$TIMESTAMP/"
+echo "  - models/indictrans2-lora-original-2gpu-$TIMESTAMP/"
+echo "  - models/indictrans2-full-original-2gpu-$TIMESTAMP/"
 echo ""
-echo "🎉 Both training runs completed!"
+echo "🎉 Both training runs completed on original data!"
 echo "Check the models directory for your trained models."
+
+
+

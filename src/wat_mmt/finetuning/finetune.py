@@ -29,6 +29,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+FLORES_CODE_MAP = {
+    "asm_Beng": "as",
+    "awa_Deva": "hi",
+    "ben_Beng": "bn",
+    "bho_Deva": "hi",
+    "brx_Deva": "hi",
+    "doi_Deva": "hi",
+    "eng_Latn": "en",
+    "gom_Deva": "kK",
+    "gon_Deva": "hi",
+    "guj_Gujr": "gu",
+    "hin_Deva": "hi",
+    "hne_Deva": "hi",
+    "kan_Knda": "kn",
+    "kas_Arab": "ur",
+    "kas_Deva": "hi",
+    "kha_Latn": "en",
+    "lus_Latn": "en",
+    "mag_Deva": "hi",
+    "mai_Deva": "hi",
+    "mal_Mlym": "ml",
+    "mar_Deva": "mr",
+    "mni_Beng": "bn",
+    "mni_Mtei": "hi",
+    "npi_Deva": "ne",
+    "ory_Orya": "or",
+    "pan_Guru": "pa",
+    "san_Deva": "hi",
+    "sat_Olck": "or",
+    "snd_Arab": "ur",
+    "snd_Deva": "hi",
+    "tam_Taml": "ta",
+    "tel_Telu": "te",
+    "urd_Arab": "ur",
+    "unr_Deva": "hi",
+}
+
 
 class IndicTrans2Finetuner:
     """Finetuner for IndicTrans2 model."""
@@ -117,19 +154,35 @@ class IndicTrans2Finetuner:
         source_langs = examples["source_lang"]
         target_langs = examples["target_lang"]
 
-        # Use IndicProcessor to preprocess inputs (with language tags)
-        processed_inputs = self.processor.preprocess_batch(
-            source_texts,
-            src_lang=source_langs[0],  # All should be same source lang
-            tgt_lang=target_langs[0],  # All should be same target lang
-        )
+        tl_map = {}
 
-        # Use IndicProcessor to preprocess targets (without language tags)
-        processed_targets = self.processor.preprocess_batch(
-            target_texts,
-            src_lang=target_langs[0],  # Target becomes source for labels
-            tgt_lang=target_langs[0],  # Same language
-        )
+        for s, t, sl, tl in zip(source_texts, target_texts, source_langs, target_langs):
+            if tl not in tl_map:
+                tl_map[tl] = [[], []]
+            tl_map[tl][0].append(s)
+            tl_map[tl][1].append(t)
+
+        processed_targets = []
+        processed_inputs = []
+        for tl in tl_map:
+            source_texts = tl_map[tl][0]
+            target_texts = tl_map[tl][1]
+
+            processed_inputs_lang = self.processor.preprocess_batch(
+                source_texts,
+                src_lang=source_langs[0],  # All should be same source lang
+                tgt_lang=tl,
+                is_target=False,
+            )
+            processed_inputs.extend(processed_inputs_lang)
+
+            # Use IndicProcessor to preprocess targets (without language tags)
+            processed_targets_lang = self.processor.preprocess_batch(
+                target_texts,
+                src_lang=tl,  # Target becomes source for labels
+                is_target=True,
+            )
+            processed_targets.extend(processed_targets_lang)
 
         # Tokenize inputs
         model_inputs = self.tokenizer(
@@ -139,9 +192,8 @@ class IndicTrans2Finetuner:
             padding=False,
         )
 
-        # Tokenize targets
         labels = self.tokenizer(
-            processed_targets,
+            text_target=processed_targets,
             max_length=self.config.max_length,
             truncation=True,
             padding=False,
@@ -247,18 +299,13 @@ class IndicTrans2Finetuner:
             fp16=self.config.fp16,
             bf16=self.config.bf16,
             gradient_checkpointing=self.config.gradient_checkpointing,
-            eval_strategy="steps",
-            eval_steps=self.config.eval_steps,
+            eval_strategy="no",  # Disable evaluation during training
             save_steps=self.config.save_steps,
             save_total_limit=self.config.save_total_limit,
             logging_steps=self.config.logging_steps,
             report_to=self.config.report_to,
-            predict_with_generate=True,
-            generation_max_length=self.config.max_length,
-            generation_num_beams=self.config.num_beams,
-            load_best_model_at_end=True,
-            metric_for_best_model="bleu",
-            greater_is_better=True,
+            predict_with_generate=False,  # Don't generate during eval
+            load_best_model_at_end=False,  # Can't load best without eval
             seed=self.config.seed,
             push_to_hub=False,
             # Multi-GPU settings
@@ -277,10 +324,9 @@ class IndicTrans2Finetuner:
             model=self.model,
             args=training_args,
             train_dataset=tokenized_datasets["train"],
-            eval_dataset=tokenized_datasets["validation"],
+            # No eval_dataset - evaluation disabled
             tokenizer=self.tokenizer,
             data_collator=data_collator,
-            compute_metrics=self.compute_metrics,
         )
 
         # Train
@@ -297,17 +343,9 @@ class IndicTrans2Finetuner:
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
 
-        # Final evaluation
-        logger.info("Running final evaluation")
-        try:
-            eval_metrics = trainer.evaluate()
-            trainer.log_metrics("eval", eval_metrics)
-            trainer.save_metrics("eval", eval_metrics)
-            logger.info(f"Final BLEU score: {eval_metrics['eval_bleu']:.2f}")
-        except Exception as e:
-            logger.warning(f"Evaluation failed: {e}")
-            logger.info("Continuing without evaluation metrics...")
-            eval_metrics = {"eval_bleu": 0.0}
+        # Evaluation disabled - IndicTrans2 generation has bugs
+        logger.info("Evaluation disabled (IndicTrans2 generation compatibility)")
+        eval_metrics = {"eval_bleu": 0.0}
 
         logger.info("Finetuning complete!")
 

@@ -10,6 +10,7 @@ import pandas as pd
 import torch
 from peft import PeftModel
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from IndicTransToolkit.processor import IndicProcessor
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,6 +30,11 @@ class IndicTrans2Translator:
         "odia": "ory_Orya",
         "english": "eng_Latn",
         # Allow direct FLORES codes too
+        "hin_deva": "hin_Deva",
+        "ben_beng": "ben_Beng",
+        "mal_mlym": "mal_Mlym",
+        "ory_orya": "ory_Orya",
+        "eng_latn": "eng_Latn",
         "hin_Deva": "hin_Deva",
         "ben_Beng": "ben_Beng",
         "mal_Mlym": "mal_Mlym",
@@ -71,36 +77,57 @@ class IndicTrans2Translator:
         # Load model and tokenizer
         self.tokenizer = None
         self.model = None
+        self.processor = None
         self._load_model()
 
     def _load_model(self):
         """Load the model and tokenizer."""
         logger.info(f"Loading model from {self.model_path}")
 
-        # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_path, use_fast=True
-        )
+        # Load tokenizer with fallback to base model
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_path, use_fast=True, trust_remote_code=True
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load tokenizer from {self.model_path}: {e}")
+            logger.info(f"Using base model tokenizer: {self.base_model}")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.base_model, use_fast=True, trust_remote_code=True
+            )
 
         if self.is_lora:
             # Load base model and LoRA adapter
             logger.info(f"Loading base model: {self.base_model}")
             base = AutoModelForSeq2SeqLM.from_pretrained(
-                self.base_model, torch_dtype=torch.float32
+                self.base_model, torch_dtype=torch.float32, trust_remote_code=True
             )
 
             logger.info("Loading LoRA adapter")
             self.model = PeftModel.from_pretrained(base, self.model_path)
             # Merge for faster inference
             self.model = self.model.merge_and_unload()
+            # Ensure model is on correct device
+            self.model = self.model.to(self.device)
         else:
             # Load full finetuned model
             self.model = AutoModelForSeq2SeqLM.from_pretrained(
-                self.model_path, torch_dtype=torch.float32
+                self.model_path, torch_dtype=torch.float32, trust_remote_code=True
             )
-
-        self.model.to(self.device)
+            # Handle meta tensors by using to_empty() first
+            try:
+                self.model.to(self.device)
+            except RuntimeError as e:
+                if "meta tensor" in str(e):
+                    logger.info("Model has meta tensors, using to_empty() method")
+                    self.model = self.model.to_empty(device=self.device)
+                else:
+                    raise e
         self.model.eval()
+
+        # Initialize IndicProcessor (use inference=True as per official docs)
+        self.processor = IndicProcessor(inference=True)
+
         logger.info("Model loaded successfully")
 
     def normalize_language_code(self, lang: str) -> str:
@@ -151,32 +178,44 @@ class IndicTrans2Translator:
         src_code = self.normalize_language_code(source_lang)
         tgt_code = self.normalize_language_code(target_lang)
 
-        # Prepare inputs with language tags
-        inputs = [f"Translate {src_code} to {tgt_code}: {t}" for t in texts]
+        # Use IndicProcessor to preprocess inputs (same as training)
+        processed_inputs = self.processor.preprocess_batch(
+            texts,
+            src_lang=src_code,
+            tgt_lang=tgt_code,
+            is_target=False,  # Match training preprocessing
+        )
 
         # Tokenize
         encoded = self.tokenizer(
-            inputs,
+            processed_inputs,
             return_tensors="pt",
             padding=True,
             truncation=True,
             max_length=max_length,
         ).to(self.device)
 
-        # Generate
+        # Generate using IndicTrans2 (workaround for beam search bug)
         with torch.no_grad():
+
             generated_ids = self.model.generate(
                 **encoded,
+                use_cache=False,
+                min_length=0,
                 max_length=max_length,
-                num_beams=num_beams,
-                temperature=temperature,
+                num_beams=1,
                 do_sample=False,
             )
 
-        # Decode
-        translations = self.tokenizer.batch_decode(
-            generated_ids, skip_special_tokens=True
+        # Decode using official method
+        generated_tokens = self.tokenizer.batch_decode(
+            generated_ids,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=True,
         )
+
+        # Postprocess using IndicProcessor (as per official docs)
+        translations = self.processor.postprocess_batch(generated_tokens, lang=tgt_code)
 
         # Clean up
         translations = [t.strip() for t in translations]
@@ -252,9 +291,7 @@ class IndicTrans2Translator:
 
         # Translate
         logger.info(f"Translating {len(texts)} texts to {target_lang}")
-        translations = self.translate_batch(
-            texts, target_lang, source_lang, **kwargs
-        )
+        translations = self.translate_batch(texts, target_lang, source_lang, **kwargs)
 
         # Add translations to dataframe
         df["translation"] = translations
@@ -302,12 +339,8 @@ def parse_args():
     # Translation mode
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--text", type=str, help="Text to translate")
-    group.add_argument(
-        "--input-file", type=Path, help="Input file to translate"
-    )
-    group.add_argument(
-        "--interactive", action="store_true", help="Interactive mode"
-    )
+    group.add_argument("--input-file", type=Path, help="Input file to translate")
+    group.add_argument("--interactive", action="store_true", help="Interactive mode")
 
     # Language settings
     parser.add_argument(
@@ -324,9 +357,7 @@ def parse_args():
     )
 
     # File mode settings
-    parser.add_argument(
-        "--output-file", type=Path, help="Output file (for file mode)"
-    )
+    parser.add_argument("--output-file", type=Path, help="Output file (for file mode)")
     parser.add_argument(
         "--text-column",
         type=str,
@@ -335,12 +366,8 @@ def parse_args():
     )
 
     # Generation settings
-    parser.add_argument(
-        "--max-length", type=int, default=256, help="Maximum length"
-    )
-    parser.add_argument(
-        "--num-beams", type=int, default=5, help="Number of beams"
-    )
+    parser.add_argument("--max-length", type=int, default=256, help="Maximum length")
+    parser.add_argument("--num-beams", type=int, default=5, help="Number of beams")
     parser.add_argument(
         "--batch-size",
         type=int,

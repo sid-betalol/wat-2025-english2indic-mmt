@@ -14,13 +14,16 @@ echo ""
 # Create test directory
 mkdir -p test_models
 
+# Create custom temp directory to avoid disk space issues
+mkdir -p /home/kushan/tmp
+
 # Set environment variables to handle disk space
-export TMPDIR="/tmp"
-export TEMP="/tmp"
-export TMP="/tmp"
+export TMPDIR="/home/kushan/tmp"
+export TEMP="/home/kushan/tmp"
+export TMP="/home/kushan/tmp"
 
 # Create temp directory if it doesn't exist
-mkdir -p /tmp
+mkdir -p /home/kushan/tmp
 
 # Test 1: LoRA Multi-GPU (quick test)
 echo "================================================================="

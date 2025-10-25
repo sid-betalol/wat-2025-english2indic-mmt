@@ -109,9 +109,7 @@ class TranslationDataProcessor:
 
                 # Get target text
                 if col_name not in df.columns:
-                    logger.warning(
-                        f"Column {col_name} not found in {data_type} data"
-                    )
+                    logger.warning(f"Column {col_name} not found in {data_type} data")
                     continue
 
                 target_text = row[col_name]
@@ -129,9 +127,7 @@ class TranslationDataProcessor:
                 }
                 examples.append(example)
 
-        logger.info(
-            f"Created {len(examples)} {data_type} examples from {len(df)} rows"
-        )
+        logger.info(f"Created {len(examples)} {data_type} examples from {len(df)} rows")
         return examples
 
     def create_datasets(self) -> DatasetDict:
@@ -153,9 +149,7 @@ class TranslationDataProcessor:
         dev_dataset = Dataset.from_list(dev_examples)
 
         # Create DatasetDict
-        dataset_dict = DatasetDict(
-            {"train": train_dataset, "validation": dev_dataset}
-        )
+        dataset_dict = DatasetDict({"train": train_dataset, "validation": dev_dataset})
 
         logger.info("Dataset statistics:")
         logger.info(f"  Train examples: {len(train_dataset)}")
