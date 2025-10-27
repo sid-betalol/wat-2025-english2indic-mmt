@@ -121,6 +121,13 @@ def main():
         help="Maximum number of concurrent API calls (default: 4)",
     )
 
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=8000,
+        help="Maximum number of tokens for the models",
+    )
+
     args = parser.parse_args()
 
     # Convert to absolute paths
@@ -161,6 +168,7 @@ def main():
 
     # Initialize and run pipeline
     try:
+        print("Initializing pipeline")
         pipeline = DataCleaningPipeline(
             csv_path=csv_path,
             images_dir=images_dir,
@@ -174,8 +182,9 @@ def main():
             checkpoint_frequency=args.checkpoint_freq,
             sample_size=args.sample,
             max_concurrent_tasks=args.max_concurrent,
+            max_tokens=args.max_tokens,
         )
-
+        print("Pipeline Initiaised")
         pipeline.run()
 
         return 0
