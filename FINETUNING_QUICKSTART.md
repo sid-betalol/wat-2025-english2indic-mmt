@@ -1,6 +1,6 @@
 # IndicTrans2 Finetuning - Quick Start Guide
 
-## 🎉 What's Been Implemented
+## What's Been Implemented
 
 A complete, production-ready finetuning pipeline for IndicTrans2 with:
 
@@ -8,6 +8,7 @@ A complete, production-ready finetuning pipeline for IndicTrans2 with:
 ✅ **Flexible Data Selection** - Original or corrected translations  
 ✅ **Multilingual Training** - All 4 languages (Hindi, Bengali, Malayalam, Odia) in one model  
 ✅ **Automatic Evaluation** - BLEU scores on dev set  
+✅ **Multi-GPU Support** - Faster training with multiple GPUs  
 ✅ **Easy Inference** - Simple Python API and CLI  
 ✅ **Mac M2 Optimized** - Works great on Apple Silicon  
 
@@ -37,7 +38,7 @@ examples/
 
 ```bash
 # LoRA with corrected data (recommended)
-python -m src.wat_mmt.finetuning.finetune \
+uv run python -m src.wat_mmt.finetuning.finetune \
     --method lora \
     --use-corrected \
     --output-dir models/my-model
@@ -47,7 +48,7 @@ python -m src.wat_mmt.finetuning.finetune \
 
 ```bash
 # Single translation
-python -m src.wat_mmt.finetuning.inference \
+uv run python -m src.wat_mmt.finetuning.inference \
     --model-path models/my-model \
     --text "Hello world" \
     --target-lang hindi
@@ -57,7 +58,7 @@ python -m src.wat_mmt.finetuning.inference \
 
 ```bash
 # Chat-like interface
-python -m src.wat_mmt.finetuning.inference \
+uv run python -m src.wat_mmt.finetuning.inference \
     --model-path models/my-model \
     --interactive \
     --target-lang bengali
@@ -86,21 +87,21 @@ python -m src.wat_mmt.finetuning.inference \
 
 ```bash
 # Train on original
-python -m src.wat_mmt.finetuning.finetune \
+uv run python -m src.wat_mmt.finetuning.finetune \
     --use-original \
     --output-dir models/model-original
 
 # Train on corrected
-python -m src.wat_mmt.finetuning.finetune \
+uv run python -m src.wat_mmt.finetuning.finetune \
     --use-corrected \
     --output-dir models/model-corrected
 
 # Compare both models' outputs
-python -m src.wat_mmt.finetuning.inference \
+uv run python -m src.wat_mmt.finetuning.inference \
     --model-path models/model-original \
     --text "test text" --target-lang hindi
 
-python -m src.wat_mmt.finetuning.inference \
+uv run python -m src.wat_mmt.finetuning.inference \
     --model-path models/model-corrected \
     --text "test text" --target-lang hindi
 ```
@@ -108,13 +109,25 @@ python -m src.wat_mmt.finetuning.inference \
 ### Batch Translation from CSV
 
 ```bash
-python -m src.wat_mmt.finetuning.inference \
+uv run python -m src.wat_mmt.finetuning.inference \
     --model-path models/my-model \
     --input-file my_data.csv \
     --output-file translations.csv \
     --target-lang malayalam \
     --text-column english_caption \
     --batch-size 32
+```
+
+### Multi-GPU Training
+
+```bash
+# Train with 2+ GPUs for faster training
+uv run python -m src.wat_mmt.finetuning.finetune \
+    --method lora \
+    --use-corrected \
+    --multi-gpu \
+    --batch-size 16 \
+    --output-dir models/my-model-multigpu
 ```
 
 ### Python API
@@ -149,6 +162,7 @@ results = translator.translate(
 | `--batch-size` | int | `8` | Batch size |
 | `--learning-rate` | float | `3e-5` | Learning rate |
 | `--lora-r` | int | `16` | LoRA rank |
+| `--multi-gpu` | flag | `False` | Enable multi-GPU training |
 
 ### Inference
 
@@ -206,6 +220,15 @@ results = translator.translate(
 --num-epochs 5
 ```
 
+### Multi-GPU Not Working?
+```bash
+# Make sure you have 2+ CUDA GPUs available
+nvidia-smi
+
+# For Mac, multi-GPU is not supported (use single MPS device)
+# Multi-GPU requires CUDA-compatible GPUs
+```
+
 ---
 
 ## 📈 Expected Performance
@@ -230,7 +253,7 @@ results = translator.translate(
 
 2. **Test translations:**
    ```bash
-   python examples/inference_example.py
+   uv run python examples/inference_example.py
    ```
 
 3. **Read full docs:**
@@ -252,14 +275,21 @@ results = translator.translate(
 
 ---
 
-## 📝 Notes for Mac M2 Users
+## 📝 Platform-Specific Notes
+
+### Mac M2/M3 Users
 
 ✅ **MPS Support**: Automatic GPU acceleration via Metal  
 ✅ **Memory Efficient**: LoRA works great with unified memory  
 ⚠️ **No FP16**: Uses FP32 (more compatible, slightly slower)  
+⚠️ **No Multi-GPU**: Multi-GPU not supported on Mac (uses single MPS device)  
 💡 **Tip**: Start with batch size 8, adjust based on memory
 
----
+### Multi-GPU Users (CUDA)
 
-**Happy Finetuning! 🎉**
+✅ **Faster Training**: ~1.5-2x speedup with 2 GPUs  
+✅ **Larger Batches**: Can use 2x batch size (16 for LoRA, 8 for full)  
+💡 **Use `--multi-gpu` flag**: Enables distributed data parallel training  
+💡 **Memory**: Each GPU needs ~8-10GB VRAM for LoRA, ~16GB+ for full  
+💡 **Best Results**: 2 GPUs provide best cost/performance ratio
 
